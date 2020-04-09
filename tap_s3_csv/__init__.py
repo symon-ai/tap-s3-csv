@@ -39,7 +39,8 @@ def do_sync(config, catalog, state):
             continue
 
         singer.write_state(state)
-        key_properties = metadata.get(mdata, (), 'table-key-properties')
+
+        key_properties = mdata.get((), {}).get('table-key-properties', [])
         singer.write_schema(stream_name, stream['schema'], key_properties)
 
         LOGGER.info("%s: Starting sync", stream_name)
