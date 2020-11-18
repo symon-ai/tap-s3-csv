@@ -2,6 +2,7 @@ import singer
 
 LOGGER = singer.get_logger()
 
+
 def infer(datum):
     """
     Returns the inferred data type
@@ -16,7 +17,7 @@ def infer(datum):
         pass
 
     try:
-        #numbers are NOT floats, they are DECIMALS
+        # numbers are NOT floats, they are DECIMALS
         float(datum)
         return 'number'
     except (ValueError, TypeError):
@@ -27,8 +28,12 @@ def infer(datum):
 
 def count_sample(sample, counts, table_spec):
     for key, value in sample.items():
+        length = len(value)
+
         if key not in counts:
-            counts[key] = {}
+            counts[key] = ({}, length)
+        elif length > counts[key][1]:
+            counts[key][1] = length
 
         date_overrides = table_spec.get('date_overrides', [])
         if key in date_overrides:
@@ -71,28 +76,31 @@ def pick_datatype(counts):
     return to_return
 
 
-def generate_schema(samples, table_spec):
+def generate_schema(samples, table_spec, string_max_length: bool):
     counts = {}
     for sample in samples:
         # {'name' : { 'string' : 45}}
         counts = count_sample(sample, counts, table_spec)
 
+    schema = {}
     for key, value in counts.items():
-        datatype = pick_datatype(value)
+        datatype = pick_datatype(value[0])
 
         if datatype == 'date-time':
-            counts[key] = {
+            schema[key] = {
                 'anyOf': [
                     {'type': ['null', 'string'], 'format': 'date-time'},
                     {'type': ['null', 'string']}
                 ]
             }
+            if string_max_length:
+                schema[key]['anyOf'][1]['maxLength'] = value[1]
         else:
             types = ['null', datatype]
             if datatype != 'string':
                 types.append('string')
-            counts[key] = {
-                'type': types,
-            }
+            schema[key] = {'type': types}
+            if string_max_length:
+                schema[key]['maxLength'] = value[1]
 
-    return counts
+    return schema
