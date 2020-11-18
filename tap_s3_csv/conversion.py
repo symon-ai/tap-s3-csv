@@ -26,14 +26,14 @@ def infer(datum):
     return 'string'
 
 
-def count_sample(sample, counts, table_spec):
+def count_sample(sample, counts, lengths, table_spec):
     for key, value in sample.items():
-        length = len(value)
-
         if key not in counts:
-            counts[key] = ({}, length)
-        elif length > counts[key][1]:
-            counts[key][1] = length
+            counts[key] = {}
+        
+        length = len(value)
+        if key not in lengths or length > lengths[key]:
+            lengths[key] = length
 
         date_overrides = table_spec.get('date_overrides', [])
         if key in date_overrides:
@@ -42,9 +42,9 @@ def count_sample(sample, counts, table_spec):
             datatype = infer(value)
 
         if datatype is not None:
-            counts[key][0][datatype] = counts[key][0].get(datatype, 0) + 1
+            counts[key][datatype] = counts[key].get(datatype, 0) + 1
 
-    return counts
+    return counts, lengths
 
 
 def pick_datatype(counts):
@@ -77,14 +77,14 @@ def pick_datatype(counts):
 
 
 def generate_schema(samples, table_spec, string_max_length: bool):
-    counts = {}
+    counts, lengths = {}, {}
     for sample in samples:
         # {'name' : { 'string' : 45}}
-        counts = count_sample(sample, counts, table_spec)
+        counts, lengths = count_sample(sample, counts, lengths, table_spec)
 
     schema = {}
     for key, value in counts.items():
-        datatype = pick_datatype(value[0])
+        datatype = pick_datatype(value)
 
         if datatype == 'date-time':
             schema[key] = {
@@ -94,13 +94,13 @@ def generate_schema(samples, table_spec, string_max_length: bool):
                 ]
             }
             if string_max_length:
-                schema[key]['anyOf'][1]['maxLength'] = value[1]
+                schema[key]['anyOf'][1]['maxLength'] = lengths[key]
         else:
             types = ['null', datatype]
             if datatype != 'string':
                 types.append('string')
             schema[key] = {'type': types}
             if string_max_length:
-                schema[key]['maxLength'] = value[1]
+                schema[key]['maxLength'] = lengths[key]
 
     return schema
