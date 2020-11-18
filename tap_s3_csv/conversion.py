@@ -42,7 +42,7 @@ def count_sample(sample, counts, table_spec):
             datatype = infer(value)
 
         if datatype is not None:
-            counts[key][datatype] = counts[key].get(datatype, 0) + 1
+            counts[key][datatype][0] = counts[key][0].get(datatype, 0) + 1
 
     return counts
 
