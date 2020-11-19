@@ -26,7 +26,7 @@ def infer(datum):
     return 'string'
 
 
-def count_sample(sample, counts, lengths, table_spec):
+def process_sample(sample, counts, lengths, table_spec):
     for key, value in sample.items():
         if key not in counts:
             counts[key] = {}
@@ -79,8 +79,8 @@ def pick_datatype(counts):
 def generate_schema(samples, table_spec, string_max_length: bool):
     counts, lengths = {}, {}
     for sample in samples:
-        # {'name' : { 'string' : 45}}
-        counts, lengths = count_sample(sample, counts, lengths, table_spec)
+        # {'name' : { 'string' : 45}}, {'name': 10}
+        counts, lengths = process_sample(sample, counts, lengths, table_spec)
 
     schema = {}
     for key, value in counts.items():
