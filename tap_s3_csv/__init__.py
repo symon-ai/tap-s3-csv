@@ -10,7 +10,7 @@ from tap_s3_csv.config import CONFIG_CONTRACT
 
 LOGGER = singer.get_logger()
 
-REQUIRED_CONFIG_KEYS = ["bucket"]
+REQUIRED_CONFIG_KEYS = ["bucket", "account_id", "external_id", "role_name"]
 
 
 def do_discover(config):
@@ -75,11 +75,14 @@ def main():
     config['tables'] = validate_table_config(config)
 
     # Check that boto can access S3
-    try:
-        for page in s3.list_files_in_bucket(config['bucket']):
-            break
-    except err:
-        LOGGER.error(err)
+    if args.importing:
+        s3.setup_aws_client(config)
+    else:
+        try:
+            for page in s3.list_files_in_bucket(config['bucket']):
+                break
+        except err:
+            LOGGER.error(err)
 
     if args.discover:
         do_discover(args.config)
