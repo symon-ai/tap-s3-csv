@@ -84,18 +84,13 @@ def main():
 
     # If external_id is provided, we are trying to access files in another AWS account, and need to assume the role
     if external_source:
-        try:
-            for page in s3.list_files_in_bucket(config['bucket']):
-                break
-        except err:
-            LOGGER.error(err)
         s3.setup_aws_client(config)
     # Otherwise, confirm that we can access the bucket in our own AWS account
     else:
         try:
             for page in s3.list_files_in_bucket(config['bucket']):
                 break
-        except err:
+        except BaseException as err:
             LOGGER.error(err)
 
     if args.discover:
