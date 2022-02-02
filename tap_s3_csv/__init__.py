@@ -10,7 +10,8 @@ from tap_s3_csv.config import CONFIG_CONTRACT
 
 LOGGER = singer.get_logger()
 
-REQUIRED_CONFIG_KEYS = ["bucket", "account_id", "external_id", "role_name"]
+REQUIRED_CONFIG_KEYS = ["bucket"]
+REQUIRED_CONFIG_KEYS_EXTERNAL_SOURCE = ["bucket", "account_id", "external_id", "role_name"]
 
 
 def do_discover(config):
@@ -72,11 +73,19 @@ def main():
     args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS)
     config = args.config
 
+    external_source = False
+
+    if 'external_id' in config:
+        args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS_EXTERNAL_SOURCE)
+        config = args.config
+        external_source = True
+
     config['tables'] = validate_table_config(config)
 
-    # Check that boto can access S3
-    if args.importing:
+    # If external_id is provided, we are trying to access files in another AWS account, and need to assume the role
+    if external_source:
         s3.setup_aws_client(config)
+    # Otherwise, confirm that we can access the bucket in our own AWS account
     else:
         try:
             for page in s3.list_files_in_bucket(config['bucket']):
