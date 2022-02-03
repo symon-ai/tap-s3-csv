@@ -15,32 +15,17 @@ from botocore.credentials import (
 )
 from botocore.exceptions import ClientError
 from botocore.session import Session
-<<<<<<< HEAD
-
-from tap_s3_csv import conversion
-from tap_s3_csv import csv_iterator
-
-LOGGER = singer.get_logger()
-
-=======
-from singer_encodings import (
-    compression,
-    csv
-)
+from singer_encodings import compression
 
 from tap_s3_csv import (
     utils,
-    conversion
+    conversion,
+    csv_iterator
 )
 
 LOGGER = singer.get_logger()
 
-SDC_SOURCE_BUCKET_COLUMN = "_sdc_source_bucket"
-SDC_SOURCE_FILE_COLUMN = "_sdc_source_file"
-SDC_SOURCE_LINENO_COLUMN = "_sdc_source_lineno"
-SDC_EXTRA_COLUMN = "_sdc_extra"
 skipped_files_count = 0
->>>>>>> source/master
 
 def retry_pattern():
     return backoff.on_exception(backoff.expo,
@@ -111,20 +96,8 @@ def get_sampled_schema_for_table(config, table_spec):
             'properties': {}
         }
 
-<<<<<<< HEAD
     data_schema = conversion.generate_schema(samples, table_spec, config.get('string_max_length', False))
-=======
-    metadata_schema = {
-        SDC_SOURCE_BUCKET_COLUMN: {'type': 'string'},
-        SDC_SOURCE_FILE_COLUMN: {'type': 'string'},
-        SDC_SOURCE_LINENO_COLUMN: {'type': 'integer'},
-        SDC_EXTRA_COLUMN: {'type': 'array', 'items': {
-            'anyOf': [{'type': 'object', 'properties': {}}, {'type': 'string'}]}}
-    }
 
-    data_schema = conversion.generate_schema(samples, table_spec)
-
->>>>>>> source/master
     return {
         'type': 'object',
         'properties': data_schema
@@ -146,13 +119,7 @@ def merge_dicts(first, second):
     return to_return
 
 
-<<<<<<< HEAD
-def sample_file(config, table_spec, s3_path, sample_rate):
-    file_handle = get_file_handle(config, s3_path)
-    iterator = csv_iterator.get_row_iterator(file_handle._raw_stream, table_spec) #pylint:disable=protected-access
-=======
 def get_records_for_csv(s3_path, sample_rate, iterator):
->>>>>>> source/master
 
     current_row = 0
     sampled_row_count = 0
@@ -268,7 +235,7 @@ def sample_file(table_spec, s3_path, file_handle, sample_rate, extension):
     if extension in ["csv", "txt"]:
         # If file object read from s3 bucket file else use extracted file object from zip or gz
         file_handle = file_handle._raw_stream if hasattr(file_handle, "_raw_stream") else file_handle #pylint:disable=protected-access
-        iterator = csv.get_row_iterator(file_handle, table_spec, None, True)
+        iterator = csv_iterator.get_row_iterator(file_handle, table_spec)
         csv_records = []
         if iterator:
             csv_records = get_records_for_csv(s3_path, sample_rate, iterator)

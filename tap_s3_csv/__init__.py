@@ -59,14 +59,9 @@ def validate_table_config(config):
             table_config.pop('search_prefix')
         if table_config.get('key_properties') == "" or table_config.get('key_properties') is None:
             table_config['key_properties'] = []
-<<<<<<< HEAD
         elif table_config.get('key_properties'):
             table_config['key_properties'] = [s.strip() for s in table_config['key_properties']]
 
-=======
-        elif table_config.get('key_properties') and isinstance(table_config['key_properties'], str):
-            table_config['key_properties'] = [s.strip() for s in table_config['key_properties'].split(',')]
->>>>>>> source/master
         if table_config.get('date_overrides') == "" or table_config.get('date_overrides') is None:
             table_config['date_overrides'] = []
         elif table_config.get('date_overrides') and isinstance(table_config['date_overrides'], str):

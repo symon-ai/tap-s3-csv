@@ -9,32 +9,20 @@ from singer import Transformer
 from singer import utils as singer_utils
 
 import singer
-<<<<<<< HEAD
-from tap_s3_csv import csv_iterator
-from tap_s3_csv import s3
-=======
-from singer_encodings import (
-    compression,
-    csv as csv_helper
-)
+from singer_encodings import compression
 from tap_s3_csv import (
     utils,
-    s3
+    s3,
+    csv_iterator
 )
->>>>>>> source/master
 
 
 LOGGER = singer.get_logger()
 
 def sync_stream(config, state, table_spec, stream):
     table_name = table_spec['table_name']
-<<<<<<< HEAD
     bookmark = singer.get_bookmark(state, table_name, 'modified_since')
-    modified_since = utils.strptime_with_tz(bookmark or '1990-01-01T00:00:00Z') 
-=======
-    modified_since = singer_utils.strptime_with_tz(singer.get_bookmark(state, table_name, 'modified_since') or
-                                            config['start_date'])
->>>>>>> source/master
+    modified_since = singer_utils.strptime_with_tz(bookmark or '1990-01-01T00:00:00Z') 
 
     LOGGER.info('Syncing table "%s".', table_name)
     LOGGER.info('Getting files modified since %s.', modified_since)
@@ -200,16 +188,8 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream):
     # need to be fixed. The other consequence of this could be larger
     # memory consumption but that's acceptable as well.
     csv.field_size_limit(sys.maxsize)
-<<<<<<< HEAD
-    iterator = csv_iterator.get_row_iterator(
-        s3_file_handle._raw_stream, table_spec) #pylint:disable=protected-access
-=======
 
-    if "properties" in stream["schema"]:
-        iterator = csv_helper.get_row_iterator(
-            file_handle, table_spec, stream["schema"]["properties"].keys(), True)
-    else:
-        iterator = csv_helper.get_row_iterator(file_handle, table_spec, None, True)
+    iterator = csv_iterator.get_row_iterator(file_handle, table_spec)
 
     records_synced = 0
 
@@ -220,17 +200,8 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream):
             if len(row) == 0:
                 continue
 
-            custom_columns = {
-                s3.SDC_SOURCE_BUCKET_COLUMN: bucket,
-                s3.SDC_SOURCE_FILE_COLUMN: s3_path,
-
-                # index zero, +1 for header row
-                s3.SDC_SOURCE_LINENO_COLUMN: records_synced + 2
-            }
-            rec = {**row, **custom_columns}
-
             with Transformer() as transformer:
-                to_write = transformer.transform(rec, stream['schema'], metadata.to_map(stream['metadata']))
+                to_write = transformer.transform(row, stream['schema'], metadata.to_map(stream['metadata']))
 
             singer.write_record(table_name, to_write)
             records_synced += 1
@@ -244,18 +215,11 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream):
 def sync_jsonl_file(config, iterator, s3_path, table_spec, stream):
     LOGGER.info('Syncing file "%s".', s3_path)
 
-    bucket = config['bucket']
     table_name = table_spec['table_name']
->>>>>>> source/master
 
     records_synced = 0
 
     for row in iterator:
-<<<<<<< HEAD
-        
-        with Transformer() as transformer:
-            to_write = transformer.transform(row, stream['schema'], metadata.to_map(stream['metadata']))
-=======
 
         decoded_row = row.decode('utf-8')
         if decoded_row.strip():
@@ -266,36 +230,10 @@ def sync_jsonl_file(config, iterator, s3_path, table_spec, stream):
         else:
             continue
 
-        custom_columns = {
-            s3.SDC_SOURCE_BUCKET_COLUMN: bucket,
-            s3.SDC_SOURCE_FILE_COLUMN: s3_path,
-
-            # index zero and then starting from 1
-            s3.SDC_SOURCE_LINENO_COLUMN: records_synced + 1
-        }
-        rec = {**row, **custom_columns}
-
         with Transformer() as transformer:
-            to_write = transformer.transform(rec, stream['schema'], metadata.to_map(stream['metadata']))
-        # collecting the value which was removed in transform to add those in _sdc_extra
-        value = [ {field:rec[field]} for field in set(rec) - set(to_write) ]
+            to_write = transformer.transform(row, stream['schema'], metadata.to_map(stream['metadata']))
 
-        if value:
-            LOGGER.warning(
-                "\"%s\" is not found in catalog and its value will be stored in the \"_sdc_extra\" field.", value)
-            extra_data = {
-                s3.SDC_EXTRA_COLUMN: value
-            }
-            update_to_write = {**to_write,**extra_data}
-        else:
-            update_to_write = to_write
-
-        # Transform again to validate _sdc_extra value.
-        with Transformer() as transformer:
-            update_to_write = transformer.transform(update_to_write, stream['schema'], metadata.to_map(stream['metadata']))
->>>>>>> source/master
-
-        singer.write_record(table_name, update_to_write)
+        singer.write_record(table_name, to_write)
         records_synced += 1
 
     return records_synced
