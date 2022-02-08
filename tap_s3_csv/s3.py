@@ -379,7 +379,7 @@ def get_input_files_for_table(config, table_spec, modified_since=None):
     matched_files_count = 0
     unmatched_files_count = 0
     max_files_before_log = 30000
-    for s3_object in list_files_in_bucket(bucket, table_spec.get('search_prefix')):
+    for s3_object in list_files_in_bucket(bucket, table_spec.get('search_prefix'), table_spec.get('recursive_search')):
         key = s3_object['Key']
         last_modified = s3_object['LastModified']
 
@@ -415,7 +415,7 @@ def get_input_files_for_table(config, table_spec, modified_since=None):
 
 
 @retry_pattern()
-def list_files_in_bucket(bucket, search_prefix=None):
+def list_files_in_bucket(bucket, search_prefix=None, recursive_search=True):
     s3_client = boto3.client('s3')
 
     s3_object_count = 0
@@ -428,6 +428,9 @@ def list_files_in_bucket(bucket, search_prefix=None):
 
     if search_prefix is not None:
         args['Prefix'] = search_prefix
+
+    if not recursive_search:
+        args['Delimiter'] = '/'
 
     paginator = s3_client.get_paginator('list_objects_v2')
     pages = 0

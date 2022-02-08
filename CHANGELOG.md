@@ -3,6 +3,7 @@
 ## 1.3.5
 
 - Reintroduce ability to assume role for external AWS account
+- Add optional parameter `recursive_seach` to table config. When set to false, will prevent searching for files in subfolders within S3 bucket
 
 ## 1.3.4
 
