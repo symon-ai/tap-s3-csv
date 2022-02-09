@@ -426,11 +426,13 @@ def list_files_in_bucket(bucket, search_prefix=None, recursive_search=True):
         'MaxKeys': max_results,
     }
 
+    if not recursive_search:
+        if search_prefix is not None and not search_prefix.endswith('/'):
+            search_prefix += '/'
+        args['Delimiter'] = '/' # This will limit results to the exact folder specified by the prefix, without going into subfolders
+
     if search_prefix is not None:
         args['Prefix'] = search_prefix
-
-    if not recursive_search:
-        args['Delimiter'] = '/'
 
     paginator = s3_client.get_paginator('list_objects_v2')
     pages = 0
