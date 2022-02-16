@@ -427,7 +427,7 @@ def list_files_in_bucket(bucket, search_prefix=None, recursive_search=True):
     }
 
     if not recursive_search:
-        if search_prefix is not None and not search_prefix.endswith('/'):
+        if search_prefix is not None and search_prefix != "" and not search_prefix.endswith('/'):
             search_prefix += '/'
         args['Delimiter'] = '/' # This will limit results to the exact folder specified by the prefix, without going into subfolders
 
