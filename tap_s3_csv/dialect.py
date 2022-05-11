@@ -21,6 +21,8 @@ def get_new_line_bytes(file_handle):
 def detect_tables_dialect(config):
     # there is only one table in the array
     for table in config['tables']:
+        # will return all matching files in s3 with given prefix
+        # symon upload stores files in s3 bucket with key that includes randomly generated prefix
         s3_files = s3.get_input_files_for_table(config, table)
 
         for s3_file in s3_files:
@@ -82,20 +84,17 @@ def detect_dialect(config, s3_file, table):
         try:
             line = next(file_iter)
             line_bytes = len(line) + new_line_bytes
-            # print(line)
+
             if line_bytes >= MAX_LINE_BYTES:
                 raise Exception('Too many bytes in one line')
             
             lines_read += 1
             
             if bytes_read + line_bytes <= MAX_LINES_BYTES:
-                # print(bytes_read + line_bytes)
                 lines.append(line)
                 bytes_read += line_bytes
 
             if detect_encoding:
-                # print(len(interesting))
-                # print(DETECT_CHARDET_LINE.search(line))
                 if len(interesting) < MAX_CHARDET_LINES and (len(interesting) < FIRST_CHARDET_LINES or DETECT_CHARDET_LINE.search(line)):
                     interesting.append(i)
 
@@ -112,8 +111,7 @@ def detect_dialect(config, s3_file, table):
         remainder = min(MAX_CHARDET_LINES - len(interesting), lines_read - 1)
 
         for _ in range(remainder):
-            # i = random.randint(1, lines_read - 1)
-            i = remainder % 20
+            i = random.randint(1, lines_read - 1)
             interesting.append(i)
         interesting.sort()
 
@@ -194,6 +192,6 @@ def detect_dialect(config, s3_file, table):
             delimiter = ','
 
         if detect_delimiter:
-            table['delimeter'] = delimiter
+            table['delimiter'] = delimiter
         if detect_quotechar:
             table['quotechar'] = quotechar
