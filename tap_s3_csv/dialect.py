@@ -6,18 +6,6 @@ import clevercsv
 
 from tap_s3_csv import s3
 
-def get_new_line_bytes(file_handle):
-    byte = file_handle.read(1)
-    bytes_read = []
-    while byte and byte != b'\n':
-        bytes_read.append(byte)
-        byte = file_handle.read(1)
-    new_line_bytes = 1
-    if bytes_read.pop() == b'\r':
-        new_line_bytes += 1
-    return new_line_bytes
-
-
 def detect_tables_dialect(config):
     # there is only one table in the array
     for table in config['tables']:
@@ -39,10 +27,6 @@ def detect_dialect(config, s3_file, table):
 
     if not detect_delimiter and not detect_delimiter and not detect_quotechar:
         return
-
-    file_key = s3_file.get('key')
-    file_handle = s3.get_file_handle(config, file_key)
-    new_line_bytes = get_new_line_bytes(file_handle)
 
     # clevercsv is good but slow - we cap it at 2000 rows, which is 1s of runtime on my machine
     MAX_DIALECT_LINES = 2000
@@ -76,19 +60,19 @@ def detect_dialect(config, s3_file, table):
     lines = []
     lines_read = 0
 
+    file_key = s3_file.get('key')
     file_handle = s3.get_file_handle(config, file_key)
     file_iter = file_handle.iter_lines()
     bytes_read = 0
     for i in range(MAX_LINES):
         try:
             line = next(file_iter)
-            line_bytes = len(line) + new_line_bytes
+            line_bytes = len(line)
 
             if line_bytes >= MAX_LINE_BYTES:
                 raise Exception('Too many bytes in one line')
             
             lines_read += 1
-            
             if bytes_read + line_bytes <= MAX_LINES_BYTES:
                 lines.append(line)
                 bytes_read += line_bytes
