@@ -21,8 +21,7 @@ def get_new_line_bytes(file_handle):
 def detect_tables_dialect(config):
     # there is only one table in the array
     for table in config['tables']:
-        # will return all matching files in s3 with given prefix
-        # symon upload stores files in s3 bucket with key that includes randomly generated prefix
+        # will return all matching files in s3 with given prefix and table name in config
         s3_files = s3.get_input_files_for_table(config, table)
 
         for s3_file in s3_files:
@@ -120,8 +119,8 @@ def detect_dialect(config, s3_file, table):
         detector.MINIMUM_THRESHOLD = 0.70
 
         for i in interesting:
+            # get line from cache
             if i < len(lines):
-                # get line from cache
                 line = lines[i]
             else:
                 line = interesting_map[i]
