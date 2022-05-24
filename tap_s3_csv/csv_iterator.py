@@ -19,13 +19,13 @@ def get_row_iterator(iterable, options=None):
 
     # Check for duplicate columns
     if len(reader.fieldnames) != len(headers):
-        fieldname_count = {}
+        fieldnames = set()
         duplicate_cols = set()
         for fieldname in reader.fieldnames:
-            fieldname_count[fieldname] = fieldname_count.get(fieldname, 0) + 1
-            if fieldname_count[fieldname] > 1:
+            if fieldname in fieldnames:
                 duplicate_cols.add(fieldname)
-        ', '.join(duplicate_cols)
+            else:
+                fieldnames.add(fieldname)
 
         raise Exception('CSV file contains duplicate columns: {}'.format(duplicate_cols))
 

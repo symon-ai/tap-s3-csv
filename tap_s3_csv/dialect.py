@@ -25,7 +25,7 @@ def detect_dialect(config, s3_file, table):
     detect_quotechar = config_quotechar == ''
     detect_encoding = config_encoding == ''
 
-    if not detect_delimiter and not detect_delimiter and not detect_quotechar:
+    if not detect_encoding and not detect_delimiter and not detect_quotechar:
         return
 
     # clevercsv is good but slow - we cap it at 2000 rows, which is 1s of runtime on my machine
