@@ -11,8 +11,8 @@ from tap_s3_csv import s3
 def detect_tables_dialect(config):
     # there is only one table in the array
     for table in config['tables']:
-        # set is_external to False for csv imports (csv connector)
-        table['is_external'] = False
+        # set is_csv_connector_import to True for imports from csv connector in Symon
+        table['is_csv_connector_import'] = True
         # will return all matching files in s3 with given prefix and table name in config
         s3_files = s3.get_input_files_for_table(config, table)
 
