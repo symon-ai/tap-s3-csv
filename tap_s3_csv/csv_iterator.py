@@ -45,9 +45,7 @@ def get_row_iterator(iterable, options=None):
             raise Exception('CSV file missing date_overrides headers: {}, file only contains headers for fields: {}'
                             .format(date_overrides - headers, headers))
 
-    final_fieldnames = handle_empty_fieldnames(reader.fieldnames, fieldname_pool, options)
-
-    setattr(reader, '_fieldnames', final_fieldnames)
+    reader.fieldnames = handle_empty_fieldnames(reader.fieldnames, fieldname_pool, options)
 
     return reader
 
