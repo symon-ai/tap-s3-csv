@@ -32,7 +32,7 @@ def stream_is_selected(mdata):
 
 
 def do_sync(config, catalog, state):
-    timers = { 'pre': 0, 'bookmark': 0, 'input_files': 0, 'get-iter': 0, 'resolve_fields': 0, 'tfm': 0, 'write_record': 0, 'write_state': 0}
+    timers = { 'pre': 0, 'bookmark': 0, 'input_files': 0, 'get_iter': 0, 'resolve_fields': 0, 'tfm': 0, 'write_record': 0, 'write_state': 0}
     LOGGER.info('Starting sync.')
 
     for stream in catalog['streams']:
