@@ -1,6 +1,7 @@
 import json
 import sys
 import singer
+import time
 
 from singer import metadata
 from tap_s3_csv.discover import discover_streams
@@ -31,9 +32,11 @@ def stream_is_selected(mdata):
 
 
 def do_sync(config, catalog, state):
+    timers = { 'pre': 0, 'bookmark': 0, 'input_files': 0, 'get-iter': 0, 'resolve_fields': 0, 'tfm': 0, 'write_record': 0, 'write_state': 0}
     LOGGER.info('Starting sync.')
 
     for stream in catalog['streams']:
+        start = time.time()
         stream_name = stream['tap_stream_id']
         mdata = metadata.to_map(stream['metadata'])
         table_spec = next(
@@ -47,9 +50,13 @@ def do_sync(config, catalog, state):
         key_properties = mdata.get((), {}).get('table-key-properties', [])
         singer.write_schema(stream_name, stream['schema'], key_properties)
 
+        timers['pre'] += time.time() - start
         LOGGER.info("%s: Starting sync", stream_name)
-        counter_value = sync_stream(config, state, table_spec, stream)
+        counter_value = sync_stream(config, state, table_spec, stream, timers)
         LOGGER.info("%s: Completed sync (%s rows)", stream_name, counter_value)
+
+    timers_str = ', '.join(f'"{k}": {v:.0f}' for k,v in timers.items())
+    LOGGER.info(f'WP10233: {{{timers_str}}}')
 
     LOGGER.info('Done syncing.')
 
