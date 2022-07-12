@@ -120,7 +120,8 @@ def detect_dialect(config, s3_file, table):
                 break
 
         # if detector had no results, default to utf-8
-        detector_results = detector.close()
+        detector.close()
+        detector_results = detector.result()
         encoding = detector_results.get('encoding', 'utf-8')
         confidence = detector_results.get('confidence', 1.0)
 
