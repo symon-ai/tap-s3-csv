@@ -1,7 +1,7 @@
 import re
 import random
 import csv
-import cchardet as chardet
+import chardet
 import clevercsv
 
 from tap_s3_csv import s3
@@ -143,12 +143,19 @@ def detect_dialect(config, s3_file, table):
         # decode cached lines by detected/config encoding as sample
         decoded = []
         chars = 0
+
         for i, line in enumerate(lines):
-            try:
-                dline = line.decode(encoding)
-            except UnicodeDecodeError as e:
-                raise UnicodeDecodeError(
-                    e.encoding, e.object, e.start, e.end, f'{e.reason} in line {i + 1}')
+            tryencode = True
+            while tryencode:
+                try:
+                    dline = line.decode(encoding)
+                    tryencode = False
+                except UnicodeDecodeError as e:
+                    if encoding != 'latin-1':
+                        encoding = 'latin-1'
+                    else:
+                        raise UnicodeDecodeError(
+                            e.encoding, e.object, e.start, e.end, f'{e.reason} in line {i + 1}')
 
             # clevercsv seems to explode in memory to multiples of sample size
             # limit sample to a reasonable amount of characters to avoid memory issue
