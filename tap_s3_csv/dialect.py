@@ -144,7 +144,7 @@ def detect_dialect(config, s3_file, table):
         decoded = []
         chars = 0
         for i, line in enumerate(lines):
-            # replace character with � when our cChardet cannot decode the line.
+            # replace character with � when line cannot be decoded.
             dline = line.decode(encoding, errors='replace')
 
             # clevercsv seems to explode in memory to multiples of sample size
