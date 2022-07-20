@@ -1,3 +1,4 @@
+from asyncio.log import logger
 import json
 import sys
 import singer
@@ -31,8 +32,10 @@ def stream_is_selected(mdata):
     return mdata.get((), {}).get('selected', False)
 
 
-def do_sync(config, catalog, state):
-    timers = { 'pre': 0, 'bookmark': 0, 'input_files': 0, 'get_iter': 0, 'resolve_fields': 0, 'tfm': 0, 'write_record': 0, 'write_state': 0}
+def do_sync(config, catalog, state, metadata):
+    timers = {'pre': 0, 'bookmark': 0, 'input_files': 0, 'get_iter': 0,
+              'resolve_fields': 0, 'tfm': 0, 'write_record': 0, 'write_state': 0}
+
     LOGGER.info('Starting sync.')
 
     for stream in catalog['streams']:
@@ -55,8 +58,14 @@ def do_sync(config, catalog, state):
         counter_value = sync_stream(config, state, table_spec, stream, timers)
         LOGGER.info("%s: Completed sync (%s rows)", stream_name, counter_value)
 
-    timers_str = ', '.join(f'"{k}": {v:.0f}' for k,v in timers.items())
-    LOGGER.info(f'WP10233: {{{timers_str}}}')
+    timers_str = ', '.join(f'"{k}": {v:.0f}' for k, v in timers.items())
+
+    orgId = metadata.get('orgId')
+    filename = metadata.get('filename')
+    logMsg = f"IMPORT_PERF_METRICS: {{{timers_str}}}"
+    logMsg = f"OrgId: {metadata.get('orgId')} Filename: {metadata.get('filename')} " + \
+        logMsg if (orgId is not None and filename is not None) else logMsg
+    LOGGER.info(logMsg)
 
     LOGGER.info('Done syncing.')
 
@@ -111,10 +120,12 @@ def main():
         # If not external source, it is from importing csv (replacement for tap-csv)
         dialect.detect_tables_dialect(config)
 
+    metadata_args = singer.utils.parse_args()
+
     if args.discover:
-        do_discover(args.config)
+        do_discover(args.config, args.metadata)
     elif args.properties:
-        do_sync(config, args.properties, args.state)
+        do_sync(config, args.properties, args.state, args.metadata)
 
 
 if __name__ == '__main__':
