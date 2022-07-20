@@ -60,11 +60,13 @@ def do_sync(config, catalog, state, metadata):
 
     timers_str = ', '.join(f'"{k}": {v:.0f}' for k, v in timers.items())
 
-    orgId = metadata.get('orgId')
+    org_id = metadata.get('orgId')
     filename = metadata.get('filename')
+    exectuion_id = metadata.get('execution_id')
     logMsg = f"IMPORT_PERF_METRICS: {{{timers_str}}}"
-    logMsg = f"OrgId: {metadata.get('orgId')} Filename: {metadata.get('filename')} " + \
-        logMsg if (orgId is not None and filename is not None) else logMsg
+    logMsg = f"OrgId: {org_id} Filename: {filename} ExecutionId: {exectuion_id}" + \
+        logMsg if (
+            org_id is not None and filename is not None and exectuion_id is not None) else logMsg
     LOGGER.info(logMsg)
 
     LOGGER.info('Done syncing.')
