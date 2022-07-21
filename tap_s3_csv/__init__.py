@@ -17,9 +17,16 @@ REQUIRED_CONFIG_KEYS = ["bucket"]
 REQUIRED_CONFIG_KEYS_EXTERNAL_SOURCE = [
     "bucket", "account_id", "external_id", "role_name"]
 
+IMPORT_PERF_METRICS_LOG_PREFIX = "IMPORT_PERF_METRICS:"
+DISCOVERY_PERF_METRICS_LOG_PREFIX = "DISCOVERY_PERF_METRICS:"
+
 
 def do_discover(config):
     LOGGER.info("Starting discover")
+    logMsg = f"{DISCOVERY_PERF_METRICS_LOG_PREFIX} perf-metrics-here"
+    logMsg = add_metadata_to_log(config, logMsg)
+    LOGGER.info(logMsg)
+
     streams = discover_streams(config)
     if not streams:
         raise Exception("No streams found")
@@ -28,11 +35,24 @@ def do_discover(config):
     LOGGER.info("Finished discover")
 
 
+def add_metadata_to_log(config, logMsg):
+    metadata = config.get('metadata', None)
+    if (metadata is not None):
+        org_id = metadata.get('org_id', None)
+        filename = metadata.get('filename', None)
+        exectuion_id = metadata.get('execution_id', None)
+        logMsg = f"OrgId: {org_id} Filename: {filename} ExecutionId: {exectuion_id} " + \
+            logMsg if (
+                org_id is not None and filename is not None and exectuion_id is not None) else logMsg
+
+    return logMsg
+
+
 def stream_is_selected(mdata):
     return mdata.get((), {}).get('selected', False)
 
 
-def do_sync(config, catalog, state, metadata):
+def do_sync(config, catalog, state):
     timers = {'pre': 0, 'bookmark': 0, 'input_files': 0, 'get_iter': 0,
               'resolve_fields': 0, 'tfm': 0, 'write_record': 0, 'write_state': 0}
 
@@ -60,13 +80,8 @@ def do_sync(config, catalog, state, metadata):
 
     timers_str = ', '.join(f'"{k}": {v:.0f}' for k, v in timers.items())
 
-    org_id = metadata.get('orgId')
-    filename = metadata.get('filename')
-    exectuion_id = metadata.get('execution_id')
-    logMsg = f"IMPORT_PERF_METRICS: {{{timers_str}}}"
-    logMsg = f"OrgId: {org_id} Filename: {filename} ExecutionId: {exectuion_id}" + \
-        logMsg if (
-            org_id is not None and filename is not None and exectuion_id is not None) else logMsg
+    logMsg = f"{IMPORT_PERF_METRICS_LOG_PREFIX} {{{timers_str}}}"
+    logMsg = add_metadata_to_log(config, logMsg)
     LOGGER.info(logMsg)
 
     LOGGER.info('Done syncing.')
@@ -121,13 +136,10 @@ def main():
 
         # If not external source, it is from importing csv (replacement for tap-csv)
         dialect.detect_tables_dialect(config)
-
-    metadata_args = singer.utils.parse_args()
-
     if args.discover:
-        do_discover(args.config, args.metadata)
+        do_discover(args.config)
     elif args.properties:
-        do_sync(config, args.properties, args.state, args.metadata)
+        do_sync(config, args.properties, args.state)
 
 
 if __name__ == '__main__':
