@@ -27,7 +27,7 @@ def do_discover(config):
 
 
 def stream_is_selected(mdata):
-    return mdata.get((), {}).get('selected', True)
+    return mdata.get((), {}).get('selected', False)
 
 
 def do_sync(config, catalog, state):
