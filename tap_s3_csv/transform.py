@@ -147,16 +147,16 @@ class Transformer:
 
         return data
 
-    def transform(self, data, schema, auto_fields, filter_fields):
+    def transform(self, data, schema, auto_fields, filter_fields, source_type_map):
         data = self.filter_data_by_metadata(data, auto_fields, filter_fields)
-
-        success, transformed_data = self.transform_recur(data, schema, [])
+        success, transformed_data = self.transform_recur(
+            data, schema, [], source_type_map)
         if not success:
             raise SchemaMismatch(self.errors)
 
         return transformed_data
 
-    def transform_recur(self, data, schema, path):
+    def transform_recur(self, data, schema, path, source_type_map=None, source_type=None):
         if "anyOf" in schema:
             return self._transform_anyof(data, schema, path)
 
@@ -174,7 +174,7 @@ class Transformer:
 
         for typ in types:
             success, transformed_data = self._transform(
-                data, typ, schema, path)
+                data, typ, schema, path, source_type_map, source_type)
             if success:
                 return success, transformed_data
         else:  # pylint: disable=useless-else-on-loop
@@ -187,7 +187,7 @@ class Transformer:
         subschemas = schema['anyOf']
         for subschema in subschemas:
             success, transformed_data = self.transform_recur(
-                data, subschema, path)
+                data, subschema, path, )
             if success:
                 return success, transformed_data
         else:  # pylint: disable=useless-else-on-loop
@@ -196,7 +196,7 @@ class Transformer:
                 Error(path, data, schema, logging_level=LOGGER.level))
             return False, None
 
-    def _transform_object(self, data, schema, path, pattern_properties):
+    def _transform_object(self, data, schema, path, pattern_properties, source_type_map):
         # We do not necessarily have a dict to transform here. The schema's
         # type could contain multiple possible values. Eg:
         #     ["null", "object", "string"]
@@ -216,8 +216,9 @@ class Transformer:
                                if re.match(pattern, key)]
             if key in schema or pattern_schemas:
                 sub_schema = schema.get(key, {'anyOf': pattern_schemas})
+
                 success, subdata = self.transform_recur(
-                    value, sub_schema, path + [key])
+                    value, sub_schema, path + [key], source_type_map, source_type_map[key] if key in source_type_map else None)
                 successes.append(success)
                 result[key] = subdata
             else:
@@ -263,9 +264,19 @@ class Transformer:
             except:
                 return string_to_datetime(value)
 
-    def _transform(self, data, typ, schema, path):
+    def _get_type_convert(self, data, source_type):
+        if source_type == 'string':
+            LOGGER.info(f'it comes to here as string {data}')
+            return True, str(data)
+        else:
+            return False, None
+
+    def _transform(self, data, typ, schema, path, source_type_map=None, source_type=None):
         if self.pre_hook:
             data = self.pre_hook(data, typ, schema)
+
+        if source_type:
+            return self._get_type_convert(data, source_type)
 
         if typ == "null":
             if data is None or data == "":
@@ -303,7 +314,7 @@ class Transformer:
             return self._transform_object(data,
                                           schema.get("properties", {}),
                                           path,
-                                          schema.get(SchemaKey.pattern_properties))
+                                          schema.get(SchemaKey.pattern_properties), source_type_map)
 
         elif typ == "array":
             return self._transform_array(data, schema["items"], path)
@@ -318,18 +329,19 @@ class Transformer:
                 return False, None
 
         elif typ == "integer":
+            if isinstance(data, str):
+                data = data.replace(",", "")
             try:
-                num = data.replace(',', '') if isinstance(data, str) else data
-                int(num)    # check if it can be cast successfully
-                return True, str(data)
+                return True, int(data)
             except:
                 return False, None
 
         elif typ == "number":
+            if isinstance(data, str):
+                data = data.replace(",", "")
+
             try:
-                num = data.replace(',', '') if isinstance(data, str) else data
-                float(num)
-                return True, str(data)
+                return True, float(data)
             except:
                 return False, None
 
@@ -349,6 +361,7 @@ class Transformer:
 def resolve_filter_fields(metadata=None):
     autos = set()
     filters = set()
+    source_type_map = dict()
 
     if metadata:
         for breadcrumb in sorted(metadata, key=len):
@@ -372,4 +385,9 @@ def resolve_filter_fields(metadata=None):
             if (selected is False) or (inclusion == 'unsupported'):
                 filters.add(breadcrumb)
 
-    return frozenset(autos), frozenset(filters)
+            sourceType = singer.metadata.get(
+                metadata, breadcrumb, 'sourceType')
+            if sourceType:
+                source_type_map[breadcrumb_path(breadcrumb)] = sourceType
+
+    return frozenset(autos), frozenset(filters), source_type_map

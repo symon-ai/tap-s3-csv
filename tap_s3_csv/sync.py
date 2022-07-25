@@ -214,7 +214,8 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream):
 
     if iterator:
         mdata = metadata.to_map(stream['metadata'])
-        auto_fields, filter_fields = transform.resolve_filter_fields(mdata)
+        auto_fields, filter_fields, source_type_map = transform.resolve_filter_fields(
+            mdata)
 
         for row in iterator:
 
@@ -224,7 +225,7 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream):
 
             with transform.Transformer() as transformer:
                 to_write = transformer.transform(
-                    row, stream['schema'], auto_fields, filter_fields)
+                    row, stream['schema'], auto_fields, filter_fields, source_type_map)
 
             singer.write_record(table_name, to_write)
             records_synced += 1
