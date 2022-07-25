@@ -266,7 +266,6 @@ class Transformer:
 
     def _get_type_convert(self, data, source_type):
         if source_type == 'string':
-            LOGGER.info(f'it comes to here as string {data}')
             return True, str(data)
         else:
             return False, None
@@ -385,9 +384,9 @@ def resolve_filter_fields(metadata=None):
             if (selected is False) or (inclusion == 'unsupported'):
                 filters.add(breadcrumb)
 
-            sourceType = singer.metadata.get(
-                metadata, breadcrumb, 'sourceType')
-            if sourceType:
-                source_type_map[breadcrumb_path(breadcrumb)] = sourceType
+            source_type = singer.metadata.get(
+                metadata, breadcrumb, 'source_type')
+            if source_type:
+                source_type_map[breadcrumb_path(breadcrumb)] = source_type
 
     return frozenset(autos), frozenset(filters), source_type_map
