@@ -27,7 +27,7 @@ def do_discover(config):
 
 
 def stream_is_selected(mdata):
-    return mdata.get((), {}).get('selected', False)
+    return mdata.get((), {}).get('selected', True)
 
 
 def do_sync(config, catalog, state):
@@ -100,8 +100,8 @@ def main():
                 break
         except BaseException as err:
             LOGGER.error(err)
-        
-        # If not external source, it is from importing csv (replacement for tap-csv) 
+
+        # If not external source, it is from importing csv (replacement for tap-csv)
         dialect.detect_tables_dialect(config)
 
     if args.discover:
