@@ -81,7 +81,7 @@ def do_sync(config, catalog, state):
     timers_str = ', '.join(f'"{k}": {v:.0f}' for k, v in timers.items())
 
     logMsg = f"{IMPORT_PERF_METRICS_LOG_PREFIX} {{{timers_str}}}"
-    logMsg = add_metadata_to_log(config, logMsg)
+    #logMsg = add_metadata_to_log(config, logMsg)
     LOGGER.info(logMsg)
 
     LOGGER.info('Done syncing.')
