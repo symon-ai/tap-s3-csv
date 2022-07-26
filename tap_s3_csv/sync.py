@@ -226,7 +226,7 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream):
             with transform.Transformer() as transformer:
                 to_write = transformer.transform(
                     row, stream['schema'], auto_fields, filter_fields, source_type_map)
-
+            LOGGER.info(f'to_write : {to_write}')
             singer.write_record(table_name, to_write)
             records_synced += 1
     else:
