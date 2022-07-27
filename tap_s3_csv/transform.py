@@ -275,8 +275,6 @@ class Transformer:
             data = self.pre_hook(data, typ, schema)
 
         if source_type:
-            LOGGER.info(
-                f'tap-s3-csv : data : {data}, source_type : {source_type}')
             return self._get_type_convert(data, source_type)
 
         if typ == "null":
