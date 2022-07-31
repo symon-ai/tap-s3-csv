@@ -1,3 +1,4 @@
+from asyncio.log import logger
 import sys
 import csv
 import io
@@ -101,9 +102,16 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
     if extension in ["csv", "txt"]:
 
         # If file is extracted from zip or gz use file object else get file object from s3 bucket
+
+        column_updates = config['columns_to_update'] if 'columns_to_update' in config else None
+
+        if len(column_updates) > 0:
+            updates = list(column_updates.values())[0]
+            column_updates_map = {update['column']: True for update in updates}
+
         file_handle = file_handler if file_handler else s3.get_file_handle(
             config, s3_path)  # pylint:disable=protected-access
-        return sync_csv_file(config, file_handle, s3_path, table_spec, stream)
+        return sync_csv_file(config, file_handle, s3_path, table_spec, stream, column_updates_map)
 
     if extension == "jsonl":
 
@@ -193,7 +201,7 @@ def sync_compressed_file(config, s3_path, table_spec, stream):
     return records_streamed
 
 
-def sync_csv_file(config, file_handle, s3_path, table_spec, stream):
+def sync_csv_file(config, file_handle, s3_path, table_spec, stream, column_updates_map=None):
     LOGGER.info('Syncing file "%s".', s3_path)
 
     bucket = config['bucket']
