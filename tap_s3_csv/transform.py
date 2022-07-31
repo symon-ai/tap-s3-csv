@@ -94,12 +94,13 @@ class Error:
 
 
 class Transformer:
-    def __init__(self, integer_datetime_fmt=NO_INTEGER_DATETIME_PARSING, pre_hook=None):
+    def __init__(self, column_updates_map, integer_datetime_fmt=NO_INTEGER_DATETIME_PARSING, pre_hook=None):
         self.integer_datetime_fmt = integer_datetime_fmt
         self.pre_hook = pre_hook
         self.removed = set()
         self.filtered = set()
         self.errors = []
+        self.column_updates_map = column_updates_map
 
     def log_warning(self):
         if self.filtered:
@@ -349,6 +350,7 @@ class Transformer:
 def resolve_filter_fields(metadata=None):
     autos = set()
     filters = set()
+    source_type_map = dict()
 
     if metadata:
         for breadcrumb in sorted(metadata, key=len):
@@ -372,4 +374,9 @@ def resolve_filter_fields(metadata=None):
             if (selected is False) or (inclusion == 'unsupported'):
                 filters.add(breadcrumb)
 
-    return frozenset(autos), frozenset(filters)
+            source_type = singer.metadata.get(
+                metadata, breadcrumb, 'source_type')
+            if source_type:
+                source_type_map[breadcrumb_path(breadcrumb)] = source_type
+
+    return frozenset(autos), frozenset(filters), source_type_map

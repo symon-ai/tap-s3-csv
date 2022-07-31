@@ -102,16 +102,9 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
     if extension in ["csv", "txt"]:
 
         # If file is extracted from zip or gz use file object else get file object from s3 bucket
-
-        column_updates = config['columns_to_update'] if 'columns_to_update' in config else None
-
-        if len(column_updates) > 0:
-            updates = list(column_updates.values())[0]
-            column_updates_map = {update['column']: True for update in updates}
-
         file_handle = file_handler if file_handler else s3.get_file_handle(
             config, s3_path)  # pylint:disable=protected-access
-        return sync_csv_file(config, file_handle, s3_path, table_spec, stream, column_updates_map)
+        return sync_csv_file(config, file_handle, s3_path, table_spec, stream)
 
     if extension == "jsonl":
 
@@ -201,7 +194,19 @@ def sync_compressed_file(config, s3_path, table_spec, stream):
     return records_streamed
 
 
-def sync_csv_file(config, file_handle, s3_path, table_spec, stream, column_updates_map=None):
+def get_column_update_map(config, source_type_map):
+    column_updates = config['columns_to_update'] if 'columns_to_update' in config else None
+
+    column_update_map = {}
+    if len(column_updates) > 0:
+        updates = list(column_updates.values())[0]
+        for update in updates:
+            if update.column in source_type_map:
+                column_update_map[update.column] = source_type_map[update.column]
+    return {}
+
+
+def sync_csv_file(config, file_handle, s3_path, table_spec, stream):
     LOGGER.info('Syncing file "%s".', s3_path)
 
     bucket = config['bucket']
@@ -222,7 +227,10 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream, column_updat
 
     if iterator:
         mdata = metadata.to_map(stream['metadata'])
-        auto_fields, filter_fields = transform.resolve_filter_fields(mdata)
+        auto_fields, filter_fields, source_type_map = transform.resolve_filter_fields(
+            mdata)
+
+        column_updates_map = get_column_update_map(config, source_type_map)
 
         for row in iterator:
 
@@ -230,7 +238,7 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream, column_updat
             if len(row) == 0:
                 continue
 
-            with transform.Transformer() as transformer:
+            with transform.Transformer(column_updates_map) as transformer:
                 to_write = transformer.transform(
                     row, stream['schema'], auto_fields, filter_fields)
 
