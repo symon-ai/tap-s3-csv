@@ -157,7 +157,7 @@ class Transformer:
 
         return transformed_data
 
-    def transform_recur(self, data, schema, path):
+    def transform_recur(self, data, schema, path, source_type=None):
         if "anyOf" in schema:
             return self._transform_anyof(data, schema, path)
 
@@ -175,7 +175,7 @@ class Transformer:
 
         for typ in types:
             success, transformed_data = self._transform(
-                data, typ, schema, path)
+                data, typ, schema, path, source_type)
             if success:
                 return success, transformed_data
         else:  # pylint: disable=useless-else-on-loop
@@ -208,6 +208,8 @@ class Transformer:
         if schema == {} and not pattern_properties:
             return True, data
 
+        LOGGER.info(f'self.column_updates_map : {self.column_updates_map}')
+
         result = {}
         successes = []
         for key, value in data.items():
@@ -218,7 +220,7 @@ class Transformer:
             if key in schema or pattern_schemas:
                 sub_schema = schema.get(key, {'anyOf': pattern_schemas})
                 success, subdata = self.transform_recur(
-                    value, sub_schema, path + [key])
+                    value, sub_schema, path + [key],  self.column_updates_map.get(key))
                 successes.append(success)
                 result[key] = subdata
             else:
@@ -264,7 +266,17 @@ class Transformer:
             except:
                 return string_to_datetime(value)
 
-    def _transform(self, data, typ, schema, path):
+    def _get_source_type_value(self, data, source_type):
+        if source_type == 'string':
+            return True, str(data)
+        else:
+            return False, None
+
+    def _transform(self, data, typ, schema, path, source_type=None):
+
+        if (source_type):
+            return self._get_source_type_value(data, source_type)
+
         if self.pre_hook:
             data = self.pre_hook(data, typ, schema)
 
@@ -319,18 +331,19 @@ class Transformer:
                 return False, None
 
         elif typ == "integer":
+            if isinstance(data, str):
+                data = data.replace(",", "")
             try:
-                num = data.replace(',', '') if isinstance(data, str) else data
-                int(num)    # check if it can be cast successfully
-                return True, str(data)
+                return True, int(data)
             except:
                 return False, None
 
         elif typ == "number":
+            if isinstance(data, str):
+                data = data.replace(",", "")
+
             try:
-                num = data.replace(',', '') if isinstance(data, str) else data
-                float(num)
-                return True, str(data)
+                return True, float(data)
             except:
                 return False, None
 

@@ -201,9 +201,10 @@ def get_column_update_map(config, source_type_map):
     if len(column_updates) > 0:
         updates = list(column_updates.values())[0]
         for update in updates:
-            if update.column in source_type_map:
-                column_update_map[update.column] = source_type_map[update.column]
-    return {}
+            column = update['column']
+            if column in source_type_map:
+                column_update_map[column] = source_type_map[column]
+    return column_update_map
 
 
 def sync_csv_file(config, file_handle, s3_path, table_spec, stream):
@@ -231,6 +232,8 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream):
             mdata)
 
         column_updates_map = get_column_update_map(config, source_type_map)
+
+        LOGGER.info(f'column_update_map fff: {column_updates_map}')
 
         for row in iterator:
 
