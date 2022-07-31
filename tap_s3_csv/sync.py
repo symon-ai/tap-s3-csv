@@ -233,8 +233,6 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream):
 
         column_updates_map = get_column_update_map(config, source_type_map)
 
-        LOGGER.info(f'column_update_map fff: {column_updates_map}')
-
         for row in iterator:
 
             # Skipping the empty line of CSV

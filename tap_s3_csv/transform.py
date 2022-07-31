@@ -208,8 +208,6 @@ class Transformer:
         if schema == {} and not pattern_properties:
             return True, data
 
-        LOGGER.info(f'self.column_updates_map : {self.column_updates_map}')
-
         result = {}
         successes = []
         for key, value in data.items():
