@@ -198,7 +198,7 @@ def get_column_update_map(config, source_type_map):
     column_updates = config['columns_to_update'] if 'columns_to_update' in config else None
 
     column_update_map = {}
-    if len(column_updates) > 0:
+    if column_updates and len(column_updates) > 0:
         updates = list(column_updates.values())[0]
         for update in updates:
             column = update['column']
