@@ -94,13 +94,13 @@ class Error:
 
 
 class Transformer:
-    def __init__(self, column_updates_map, integer_datetime_fmt=NO_INTEGER_DATETIME_PARSING, pre_hook=None):
+    def __init__(self, source_type_for_updatecol_map, integer_datetime_fmt=NO_INTEGER_DATETIME_PARSING, pre_hook=None):
         self.integer_datetime_fmt = integer_datetime_fmt
         self.pre_hook = pre_hook
         self.removed = set()
         self.filtered = set()
         self.errors = []
-        self.column_updates_map = column_updates_map
+        self.source_type_for_updatecol_map = source_type_for_updatecol_map
 
     def log_warning(self):
         if self.filtered:
@@ -218,7 +218,7 @@ class Transformer:
             if key in schema or pattern_schemas:
                 sub_schema = schema.get(key, {'anyOf': pattern_schemas})
                 success, subdata = self.transform_recur(
-                    value, sub_schema, path + [key],  self.column_updates_map.get(key))
+                    value, sub_schema, path + [key],  self.source_type_for_updatecol_map.get(key))
                 successes.append(success)
                 result[key] = subdata
             else:
@@ -264,16 +264,50 @@ class Transformer:
             except:
                 return string_to_datetime(value)
 
-    def _get_source_type_value(self, data, source_type):
-        if source_type == 'string':
-            return True, str(data)
+    def _get_transformvalue_by_type(self, data, type):
+        if type == "string":
+            if data is not None:
+                try:
+                    return True, str(data)
+                except:
+                    return False, None
+            else:
+                return False, None
+
+        elif type == "integer":
+            if isinstance(data, str):
+                data = data.replace(",", "")
+            try:
+                return True, int(data)
+            except:
+                return False, None
+
+        elif type == "number":
+            if isinstance(data, str):
+                data = data.replace(",", "")
+
+            try:
+                return True, float(data)
+            except:
+                LOGGER.info(f'it is failing here : {data}')
+                return False, None
+
+        elif type == "boolean":
+            if isinstance(data, str) and data.lower() == "false":
+                return True, False
+
+            try:
+                return True, bool(data)
+            except:
+                return False, None
+
         else:
             return False, None
 
     def _transform(self, data, typ, schema, path, source_type=None):
 
-        if (source_type):
-            return self._get_source_type_value(data, source_type)
+        if source_type:
+            return self._get_transformvalue_by_type(data, source_type)
 
         if self.pre_hook:
             data = self.pre_hook(data, typ, schema)
@@ -319,43 +353,8 @@ class Transformer:
         elif typ == "array":
             return self._transform_array(data, schema["items"], path)
 
-        elif typ == "string":
-            if data is not None:
-                try:
-                    return True, str(data)
-                except:
-                    return False, None
-            else:
-                return False, None
-
-        elif typ == "integer":
-            if isinstance(data, str):
-                data = data.replace(",", "")
-            try:
-                return True, int(data)
-            except:
-                return False, None
-
-        elif typ == "number":
-            if isinstance(data, str):
-                data = data.replace(",", "")
-
-            try:
-                return True, float(data)
-            except:
-                return False, None
-
-        elif typ == "boolean":
-            if isinstance(data, str) and data.lower() == "false":
-                return True, False
-
-            try:
-                return True, bool(data)
-            except:
-                return False, None
-
         else:
-            return False, None
+            return self._get_transformvalue_by_type(data, typ)
 
 
 def resolve_filter_fields(metadata=None):
