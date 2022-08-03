@@ -193,10 +193,10 @@ def sync_compressed_file(config, s3_path, table_spec, stream):
     return records_streamed
 
 
-def get_column_update_map(config, source_type_map):
+def get_source_type_for_updatecol_map(config, source_type_map):
     column_updates = config['columns_to_update'] if 'columns_to_update' in config else None
 
-    column_update_map = {}
+    source_type_for_updatecol_map = {}
     if column_updates and len(column_updates) > 0:
         updates = list(column_updates.values())[0]
         for update in updates:
@@ -205,8 +205,8 @@ def get_column_update_map(config, source_type_map):
 
             column = update['column']
             if column in source_type_map:
-                column_update_map[column] = source_type_map[column]
-    return column_update_map
+                source_type_for_updatecol_map[column] = source_type_map[column]
+    return source_type_for_updatecol_map
 
 
 def sync_csv_file(config, file_handle, s3_path, table_spec, stream):
@@ -233,7 +233,7 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream):
         auto_fields, filter_fields, source_type_map = transform.resolve_filter_fields(
             mdata)
 
-        source_type_for_updatecol_map = get_column_update_map(
+        source_type_for_updatecol_map = get_source_type_for_updatecol_map(
             config, source_type_map)
 
         for row in iterator:

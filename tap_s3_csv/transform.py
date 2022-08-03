@@ -289,7 +289,6 @@ class Transformer:
             try:
                 return True, float(data)
             except:
-                LOGGER.info(f'it is failing here : {data}')
                 return False, None
 
         elif type == "boolean":
