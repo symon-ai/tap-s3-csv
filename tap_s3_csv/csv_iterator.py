@@ -1,6 +1,5 @@
 import codecs
 import csv
-from distutils.log import error
 
 
 def get_row_iterator(iterable, options=None):
