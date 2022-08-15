@@ -35,11 +35,11 @@ def stream_is_selected(mdata):
     return mdata.get((), {}).get('selected', False)
 
 
-def do_sync(config, catalog, state):
-    timers = {'pre': 0, 'bookmark': 0, 'input_files': 0, 'get_iter': 0,
-              'resolve_fields': 0, 'tfm': 0, 'write_record': 0, 'write_state': 0}
+def do_sync(config, catalog, state, main_time=0, json_lib='simple'):
+    timers = {'main': main_time, 'pre': 0, 'bookmark': 0, 'input_files': 0, 'get_iter': 0,
+              'resolve_fields': 0, 'tfm': 0, 'write_record': 0, 'write_state': 0, 'write_record-json': 0, 'write_record-write': 0, 'write_record-flush': 0}
 
-    LOGGER.info('Starting sync.')
+    LOGGER.info('Starting sync test.')
 
     for stream in catalog['streams']:
         start = time.time()
@@ -58,7 +58,7 @@ def do_sync(config, catalog, state):
 
         timers['pre'] += time.time() - start
         LOGGER.info("%s: Starting sync", stream_name)
-        counter_value = sync_stream(config, state, table_spec, stream, timers)
+        counter_value = sync_stream(config, state, table_spec, stream, timers, json_lib)
         LOGGER.info("%s: Completed sync (%s rows)", stream_name, counter_value)
 
     timers_str = ', '.join(f'"{k}": {v:.0f}' for k, v in timers.items())
@@ -105,6 +105,9 @@ def main():
 
     config['tables'] = validate_table_config(config)
 
+    json_lib = config.get('json_lib', 'simple')
+
+    start = time.time()
     # If external_id is provided, we are trying to access files in another AWS account, and need to assume the role
     if external_source:
         s3.setup_aws_client(config)
@@ -118,10 +121,12 @@ def main():
 
         # If not external source, it is from importing csv (replacement for tap-csv)
         dialect.detect_tables_dialect(config)
+    main_time = time.time() - start
+
     if args.discover:
         do_discover(args.config)
     elif args.properties:
-        do_sync(config, args.properties, args.state)
+        do_sync(config, args.properties, args.state, main_time, json_lib)
 
 
 if __name__ == '__main__':
