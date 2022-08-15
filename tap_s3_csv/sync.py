@@ -94,6 +94,7 @@ def sync_table_file(config, s3_path, table_spec, stream, timers={}, json_lib='si
 
 # pylint: disable=too-many-arguments
 def handle_file(config, s3_path, table_spec, stream, extension, file_handler=None, timers={}, json_lib='simple'):
+    LOGGER.warn(f'HANDLING FILE {s3_path} {json_lib}')
     """
     Used to sync normal supported files
     """
