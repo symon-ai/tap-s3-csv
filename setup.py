@@ -18,7 +18,8 @@ setup(name='tap-s3-csv',
           'clevercsv~=0.6.3',
           'cchardet==2.1.7',
           'ujson==5.4.0',
-          'orjson==3.7.11'
+          'orjson==3.7.11',
+          'python-rapidjson==1.8.0'
       ],
       extras_require={
           'dev': [

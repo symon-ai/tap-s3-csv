@@ -10,6 +10,7 @@ import time
 
 import ujson
 import orjson
+import rapidjson
 
 import singer
 
@@ -224,6 +225,8 @@ def format_message(message, timers=None, json_lib='simple'):
         result = ujson.dumps(message.asdict())
     elif json_lib == 'orjson':
         result = orjson.dumps(message.asdict()).decode('utf-8')
+    elif json_lib == 'rapid':
+        result = rapidjson.dumps(message.asdict())
     else:
         result = json.dumps(message.asdict())
     timers['write_record-json'] += time.time() - start
