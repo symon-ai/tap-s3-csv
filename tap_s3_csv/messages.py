@@ -219,7 +219,7 @@ def parse_message(msg):
         return None
 
 
-def format_message(message, timers=None, json_lib='simple'):
+def format_message(message, timers={}, json_lib='simple'):
     start = time.time()
     if json_lib == 'ujson':
         result = ujson.dumps(message.asdict())
@@ -229,39 +229,49 @@ def format_message(message, timers=None, json_lib='simple'):
         result = rapidjson.dumps(message.asdict())
     else:
         result = json.dumps(message.asdict())
+
     timers['write_record-json'] += time.time() - start
+
     return result
 
 
-def write_message(message, timers=None, json_lib='simple'):
+def write_message(message, timers={}, json_lib='simple', flush = True):
     formatted = format_message(message, timers, json_lib)
+    
     start = time.time()
     sys.stdout.write(f'{formatted}\n')
     timers['write_record-write'] += time.time() - start
-    start = time.time()
-    sys.stdout.flush()
-    timers['write_record-flush'] += time.time() - start
+
+    if flush:
+        start = time.time()
+        sys.stdout.flush()
+        timers['write_record-flush'] += time.time() - start
 
 
-def write_record(stream_name, record, stream_alias=None, time_extracted=None, timers=None, json_lib='simple'):
+def write_record(stream_name, record, stream_alias=None, time_extracted=None, timers={}, json_lib='simple', flush=True):
     """Write a single record for the given stream.
 
     >>> write_record("users", {"id": 2, "email": "mike@stitchdata.com"})
     """
     write_message(RecordMessage(stream=(stream_alias or stream_name),
                                 record=record,
-                                time_extracted=time_extracted), timers, json_lib)
+                                time_extracted=time_extracted), timers, json_lib, flush)
 
 
-def write_records(stream_name, records):
+def write_records(stream_name, records, timers={}, json_lib='simple'):
     """Write a list of records for the given stream.
 
     >>> chris = {"id": 1, "email": "chris@stitchdata.com"}
     >>> mike = {"id": 2, "email": "mike@stitchdata.com"}
     >>> write_records("users", [chris, mike])
     """
+
     for record in records:
-        write_record(stream_name, record)
+        write_record(stream_name, record, None, None, timers, json_lib, False)
+
+    start = time.time()
+    sys.stdout.flush()
+    timers['write_record-flush'] += time.time() - start
 
 
 def write_schema(stream_name, schema, key_properties, bookmark_properties=None, stream_alias=None):

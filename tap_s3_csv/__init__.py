@@ -35,7 +35,7 @@ def stream_is_selected(mdata):
     return mdata.get((), {}).get('selected', False)
 
 
-def do_sync(config, catalog, state, main_time=0, json_lib='simple'):
+def do_sync(config, catalog, state, main_time=0, json_lib='simple', batch_size=1):
     timers = {'main': main_time, 'pre': 0, 'bookmark': 0, 'input_files': 0, 'get_iter': 0,
               'resolve_fields': 0, 'tfm': 0, 'write_record': 0, 'write_state': 0, 'write_record-json': 0, 'write_record-write': 0, 'write_record-flush': 0}
 
@@ -58,7 +58,7 @@ def do_sync(config, catalog, state, main_time=0, json_lib='simple'):
 
         timers['pre'] += time.time() - start
         LOGGER.info("%s: Starting sync", stream_name)
-        counter_value = sync_stream(config, state, table_spec, stream, timers, json_lib)
+        counter_value = sync_stream(config, state, table_spec, stream, timers, json_lib, batch_size)
         LOGGER.info("%s: Completed sync (%s rows)", stream_name, counter_value)
 
     timers_str = ', '.join(f'"{k}": {v:.0f}' for k, v in timers.items())
@@ -106,6 +106,7 @@ def main():
     config['tables'] = validate_table_config(config)
 
     json_lib = config.get('json_lib', 'simple')
+    batch_size = config.get('batch_size', 1)
 
     start = time.time()
     # If external_id is provided, we are trying to access files in another AWS account, and need to assume the role
@@ -126,7 +127,7 @@ def main():
     if args.discover:
         do_discover(args.config)
     elif args.properties:
-        do_sync(config, args.properties, args.state, main_time, json_lib)
+        do_sync(config, args.properties, args.state, main_time, json_lib, batch_size)
 
 
 if __name__ == '__main__':

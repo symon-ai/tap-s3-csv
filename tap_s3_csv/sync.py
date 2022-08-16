@@ -22,7 +22,7 @@ from tap_s3_csv import (
 LOGGER = singer.get_logger()
 
 
-def sync_stream(config, state, table_spec, stream, timers, json_lib='simple'):
+def sync_stream(config, state, table_spec, stream, timers, json_lib='simple', batch_size=1):
     start = time.time()
     table_name = table_spec['table_name']
     bookmark = singer.get_bookmark(state, table_name, 'modified_since')
@@ -48,7 +48,7 @@ def sync_stream(config, state, table_spec, stream, timers, json_lib='simple'):
     # based on anything else then we could just sync files as we see them.
     for s3_file in sorted(s3_files, key=lambda item: item['key']):
         records_streamed += sync_table_file(
-            config, s3_file['key'], table_spec, stream, timers, json_lib)
+            config, s3_file['key'], table_spec, stream, timers, json_lib, batch_size)
 
         start = time.time()
         state = singer.write_bookmark(
@@ -66,7 +66,7 @@ def sync_stream(config, state, table_spec, stream, timers, json_lib='simple'):
     return records_streamed
 
 
-def sync_table_file(config, s3_path, table_spec, stream, timers={}, json_lib='simple'):
+def sync_table_file(config, s3_path, table_spec, stream, timers={}, json_lib='simple', batch_size=1):
 
     extension = s3_path.split(".")[-1].lower()
 
@@ -77,9 +77,9 @@ def sync_table_file(config, s3_path, table_spec, stream, timers={}, json_lib='si
         return 0
     try:
         if extension == "zip":
-            return sync_compressed_file(config, s3_path, table_spec, stream, json_lib)
+            return sync_compressed_file(config, s3_path, table_spec, stream, json_lib, batch_size)
         if extension in ["csv", "gz", "jsonl", "txt"]:
-            return handle_file(config, s3_path, table_spec, stream, extension, None, timers, json_lib)
+            return handle_file(config, s3_path, table_spec, stream, extension, None, timers, json_lib, batch_size)
         LOGGER.warning(
             '"%s" having the ".%s" extension will not be synced.', s3_path, extension)
     except (UnicodeDecodeError, json.decoder.JSONDecodeError):
@@ -93,7 +93,7 @@ def sync_table_file(config, s3_path, table_spec, stream, timers={}, json_lib='si
 
 
 # pylint: disable=too-many-arguments
-def handle_file(config, s3_path, table_spec, stream, extension, file_handler=None, timers={}, json_lib='simple'):
+def handle_file(config, s3_path, table_spec, stream, extension, file_handler=None, timers={}, json_lib='simple', batch_size=1):
     LOGGER.warn(f'HANDLING FILE {s3_path} {json_lib}')
     """
     Used to sync normal supported files
@@ -105,14 +105,14 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
         s3.skipped_files_count = s3.skipped_files_count + 1
         return 0
     if extension == "gz":
-        return sync_gz_file(config, s3_path, table_spec, stream, file_handler, json_lib)
+        return sync_gz_file(config, s3_path, table_spec, stream, file_handler, json_lib, batch_size)
 
     if extension in ["csv", "txt"]:
 
         # If file is extracted from zip or gz use file object else get file object from s3 bucket
         file_handle = file_handler if file_handler else s3.get_file_handle(
             config, s3_path)  # pylint:disable=protected-access
-        return sync_csv_file(config, file_handle, s3_path, table_spec, stream, timers, json_lib)
+        return sync_csv_file(config, file_handle, s3_path, table_spec, stream, timers, json_lib, batch_size)
 
     if extension == "jsonl":
 
@@ -139,7 +139,7 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
     return 0
 
 
-def sync_gz_file(config, s3_path, table_spec, stream, file_handler, json_lib='simple'):
+def sync_gz_file(config, s3_path, table_spec, stream, file_handler, json_lib='simple', batch_size=1):
     if s3_path.endswith(".tar.gz"):
         LOGGER.warning(
             'Skipping "%s" file as .tar.gz extension is not supported', s3_path)
@@ -175,12 +175,12 @@ def sync_gz_file(config, s3_path, table_spec, stream, file_handler, json_lib='si
             return 0
 
         gz_file_extension = gz_file_name.split(".")[-1].lower()
-        return handle_file(config, s3_path + "/" + gz_file_name, table_spec, stream, gz_file_extension, io.BytesIO(gz_file_obj.read()), {}, json_lib)
+        return handle_file(config, s3_path + "/" + gz_file_name, table_spec, stream, gz_file_extension, io.BytesIO(gz_file_obj.read()), {}, json_lib, batch_size)
 
     raise Exception('"{}" file has some error(s)'.format(s3_path))
 
 
-def sync_compressed_file(config, s3_path, table_spec, stream, json_lib='simple'):
+def sync_compressed_file(config, s3_path, table_spec, stream, json_lib='simple', batch_size=1):
     LOGGER.info('Syncing Compressed file "%s".', s3_path)
 
     records_streamed = 0
@@ -197,7 +197,7 @@ def sync_compressed_file(config, s3_path, table_spec, stream, json_lib='simple')
             s3_file_path = s3_path + "/" + decompressed_file.name
 
             records_streamed += handle_file(config, s3_file_path, table_spec,
-                                            stream, extension, decompressed_file, {}, json_lib)
+                                            stream, extension, decompressed_file, {}, json_lib, batch_size)
 
     return records_streamed
 
@@ -218,7 +218,7 @@ def get_source_type_for_updatecol_map(config, source_type_map):
     return source_type_for_updatecol_map
 
 
-def sync_csv_file(config, file_handle, s3_path, table_spec, stream, timers={}, json_lib='simple'):
+def sync_csv_file(config, file_handle, s3_path, table_spec, stream, timers={}, json_lib='simple', batch_size=1):
     start = time.time()
     LOGGER.info('Syncing file "%s".', s3_path)
 
@@ -238,6 +238,8 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream, timers={}, j
     timers['get_iter'] += time.time() - start
 
     records_synced = 0
+
+    records = []
 
     if iterator:
         start = time.time()
@@ -262,12 +264,26 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream, timers={}, j
             timers['tfm'] += time.time() - start
 
             start = time.time()
-            messages.write_record(table_name, to_write, None, None, timers, json_lib)
+            if batch_size == 1:
+                messages.write_record(table_name, to_write, None, None, timers, json_lib)
+            else:
+                records.append(to_write)
+
+                if len(records) >= batch_size:
+                    messages.write_records(table_name, records, timers, json_lib)
+                    records = []
+
             records_synced += 1
             timers['write_record'] += time.time() - start
     else:
         LOGGER.warning('Skipping "%s" file as it is empty', s3_path)
         s3.skipped_files_count = s3.skipped_files_count + 1
+
+    if len(records) > 0:
+        start = time.time()
+        messages.write_records(table_name, records, timers, json_lib)
+        records = []
+        timers['write_record'] += time.time() - start
 
     return records_synced
 
