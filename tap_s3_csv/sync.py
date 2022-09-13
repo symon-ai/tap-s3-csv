@@ -117,6 +117,7 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
                 config['bucket'], s3_path, start_byte, end_byte, range_size)
         else:
             file_handle = s3.get_file_handle(config, s3_path)
+            LOGGER.info('using S3 Get Range method for csv import')
 
         return sync_csv_file(config, file_handle, s3_path, table_spec, stream, timers, json_lib)
 
