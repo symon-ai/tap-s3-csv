@@ -679,12 +679,6 @@ class GetFileRangeStream:
         s3_object = s3.Object(self.bucket, self.key)
         return s3_object.content_length
 
-    @retry_pattern()
-    def __get_content_length__(self):
-        s3 = boto3.resource('s3')
-        s3_object = s3.Object(self.bucket, self.key)
-        return s3_object.content_length
-
 
 def get_csv_file(bucket: str, key: str, start: int, end: int, range_size: int):
     return GetFileRangeStream(bucket=bucket, key=key,
