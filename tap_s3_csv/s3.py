@@ -535,7 +535,6 @@ class GetFileRangeStream:
         yield headers
 
         eol = self.__get_eol__()
-        LOGGER.info(eol)
 
         end = min(self.end_byte, file_size)
 
@@ -624,7 +623,7 @@ class GetFileRangeStream:
             start_range = end_range + 1
             end_range = min(start_range+self.chunk_size, iter_end_byte)
 
-        LOGGER.info(f'total no of S3 calls: {count_s3_calls}')
+        #LOGGER.info(f'total no of S3 calls: {count_s3_calls}')
 
     @retry_pattern()
     def __get_headers__(self):
