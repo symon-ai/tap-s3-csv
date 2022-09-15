@@ -3,7 +3,6 @@ import csv
 import io
 import json
 import gzip
-import time
 
 from singer import metadata
 from singer import utils as singer_utils
@@ -24,21 +23,17 @@ LOGGER = singer.get_logger()
 BUFFER_SIZE = 100
 
 
-def sync_stream(config, state, table_spec, stream, start_byte, end_byte, range_size, timers, json_lib):
-    start = time.time()
+def sync_stream(config, state, table_spec, stream, start_byte, end_byte, range_size, json_lib):
     table_name = table_spec['table_name']
     bookmark = singer.get_bookmark(state, table_name, 'modified_since')
     modified_since = singer_utils.strptime_with_tz(
         bookmark or '1990-01-01T00:00:00Z')
-    timers['bookmark'] += time.time() - start
 
     LOGGER.info('Syncing table "%s".', table_name)
     LOGGER.info('Getting files modified since %s.', modified_since)
 
-    start = time.time()
     s3_files = s3.get_input_files_for_table(
         config, table_spec, modified_since)
-    timers['input_files'] += time.time() - start
 
     records_streamed = 0
 
@@ -50,13 +45,11 @@ def sync_stream(config, state, table_spec, stream, start_byte, end_byte, range_s
     # based on anything else then we could just sync files as we see them.
     for s3_file in sorted(s3_files, key=lambda item: item['key']):
         records_streamed += sync_table_file(
-            config, s3_file['key'], table_spec, stream, start_byte, end_byte, range_size, timers, json_lib)
+            config, s3_file['key'], table_spec, stream, start_byte, end_byte, range_size, json_lib)
 
-        start = time.time()
         state = singer.write_bookmark(
             state, table_name, 'modified_since', s3_file['last_modified'].isoformat())
         singer.write_state(state)
-        timers['write_state'] += time.time() - start
 
     if s3.skipped_files_count:
         LOGGER.warn("%s files got skipped during the last sync.",
@@ -68,7 +61,7 @@ def sync_stream(config, state, table_spec, stream, start_byte, end_byte, range_s
     return records_streamed
 
 
-def sync_table_file(config, s3_path, table_spec, stream, byte_start, byte_end, range_size, timers={}, json_lib='simple'):
+def sync_table_file(config, s3_path, table_spec, stream, byte_start, byte_end, range_size, json_lib='simple'):
     extension = s3_path.split(".")[-1].lower()
 
     # Check whether file is without extension or not
@@ -80,7 +73,7 @@ def sync_table_file(config, s3_path, table_spec, stream, byte_start, byte_end, r
         if extension == "zip":
             return sync_compressed_file(config, s3_path, table_spec, stream, byte_start, byte_end, range_size)
         if extension in ["csv", "gz", "jsonl", "txt"]:
-            return handle_file(config, s3_path, table_spec, stream, extension, None, byte_start, byte_end, range_size, timers, json_lib)
+            return handle_file(config, s3_path, table_spec, stream, extension, None, byte_start, byte_end, range_size, json_lib)
         LOGGER.warning(
             '"%s" having the ".%s" extension will not be synced.', s3_path, extension)
     except (UnicodeDecodeError, json.decoder.JSONDecodeError):
@@ -94,7 +87,7 @@ def sync_table_file(config, s3_path, table_spec, stream, byte_start, byte_end, r
 
 
 # pylint: disable=too-many-arguments
-def handle_file(config, s3_path, table_spec, stream, extension, file_handler=None, start_byte=None, end_byte=None, range_size=1024*1024, timers={}, json_lib='simple'):
+def handle_file(config, s3_path, table_spec, stream, extension, file_handler=None, start_byte=None, end_byte=None, range_size=1024*1024, json_lib='simple'):
     """
     Used to sync normal supported files
     """
@@ -119,7 +112,7 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
             file_handle = s3.get_file_handle(config, s3_path)
             LOGGER.info('using S3 Get Range method for csv import')
 
-        return sync_csv_file(config, file_handle, s3_path, table_spec, stream, timers, json_lib)
+        return sync_csv_file(config, file_handle, s3_path, table_spec, stream, json_lib)
 
     if extension == "jsonl":
 
@@ -225,8 +218,7 @@ def get_source_type_for_updatecol_map(config, source_type_map):
     return source_type_for_updatecol_map
 
 
-def sync_csv_file(config, file_handle, s3_path, table_spec, stream, timers={}, json_lib='simple'):
-    start = time.time()
+def sync_csv_file(config, file_handle, s3_path, table_spec, stream, json_lib='simple'):
     LOGGER.info('Syncing file "%s".', s3_path)
 
     table_name = table_spec['table_name']
@@ -241,19 +233,16 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream, timers={}, j
     csv.field_size_limit(sys.maxsize)
 
     iterator = csv_iterator.get_row_iterator(file_handle, table_spec)
-    timers['get_iter'] += time.time() - start
 
     records_synced = 0
     records_buffer = []
 
     if iterator:
-        start = time.time()
         mdata = metadata.to_map(stream['metadata'])
         auto_fields, filter_fields, source_type_map = transform.resolve_filter_fields(
             mdata)
         source_type_for_updatecol_map = get_source_type_for_updatecol_map(
             config, source_type_map)
-        timers['resolve_fields'] += time.time() - start
 
         tfm = transform.Transformer(source_type_for_updatecol_map)
         # modify schema in-place to put null as the last type to check for
@@ -265,29 +254,23 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream, timers={}, j
             if len(row) == 0:
                 continue
 
-            start = time.time()
             to_write = tfm.transform(
                 row, stream['schema'], auto_fields, filter_fields)
             tfm.cleanup()
-            timers['tfm'] += time.time() - start
 
-            start = time.time()
             records_buffer.append(to_write)
 
             if len(records_buffer) >= BUFFER_SIZE:
                 messages.write_records(table_name, records_buffer, json_lib)
                 records_synced += len(records_buffer)
                 records_buffer.clear()
-            timers['write_record'] += time.time() - start
     else:
         LOGGER.warning('Skipping "%s" file as it is empty', s3_path)
         s3.skipped_files_count = s3.skipped_files_count + 1
 
-    start = time.time()
     if len(records_buffer) > 0:
         messages.write_records(table_name, records_buffer, json_lib)
         records_synced += len(records_buffer)
-    timers['write_record'] += time.time() - start
 
     return records_synced
 
