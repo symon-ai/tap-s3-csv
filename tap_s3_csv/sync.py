@@ -202,7 +202,6 @@ def sync_compressed_file(config, s3_path, table_spec, stream):
     return records_streamed
 
 def sync_csv_file(config, file_handle, s3_path, table_spec, stream, timers={}):
-    start = time.time()
     LOGGER.info('Syncing file "%s".', s3_path)
 
     table_name = table_spec['table_name']
