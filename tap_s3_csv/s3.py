@@ -600,7 +600,7 @@ class GetFileRangeStream:
                         yield return_line
                 pending = lines[-1]
 
-            if overflow_row_count >= overflow_rows_allowed:
+            if overflow_row_count >= overflow_rows_allowed or count_skipped_rows_at_start == 0:
                 return
             if pending:
                 #LOGGER.info(f'still pending: {pending}')
