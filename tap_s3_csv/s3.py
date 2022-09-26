@@ -558,7 +558,7 @@ class GetFileRangeStream:
 
         # handle partial line at chunk end
         if pending:
-            LOGGER.info(f'pending: {pending}')
+            #LOGGER.info(f'pending: {pending}')
             # if its EOF, return existing pending
             if (end == file_size - 1):
                 if count_skipped_rows_at_start == 0:
@@ -618,12 +618,12 @@ class GetFileRangeStream:
         while start_range < iter_end_byte:
             count_s3_calls += 1
             request_range = f'bytes={start_range}-{end_range}'
-            LOGGER.info(f'request range: {request_range}')
+            #LOGGER.info(f'request range: {request_range}')
             response = s3_object.get(
                 Range=request_range
             )
             for chunk in response['Body']:
-                LOGGER.info(f'chunk: {chunk}')
+                #LOGGER.info(f'chunk: {chunk}')
                 yield chunk
             start_range = end_range + 1
             end_range = min(start_range+self.chunk_size, iter_end_byte)
