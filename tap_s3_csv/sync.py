@@ -239,6 +239,7 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream, json_lib='si
             to_write = tfm.transform(
                 row, stream['schema'], auto_fields, filter_fields)
             tfm.cleanup()
+            LOGGER.info(f'row to write: {to_write}')
 
             records_buffer.append(to_write)
 
