@@ -112,7 +112,7 @@ def generate_schema(samples, table_spec, string_max_length: bool):
             schema[key] = {
                 'anyOf': [
                     {'type': 'array', 'items': datatype_schema(
-                        child_datatype)},
+                        child_datatype, lengths[key], string_max_length)},
                     {'type': ['null', 'string']}
                 ]
             }
