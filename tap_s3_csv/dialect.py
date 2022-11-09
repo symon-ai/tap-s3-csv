@@ -126,9 +126,11 @@ def detect_dialect(config, s3_file, table):
         encoding = detector_results.get('encoding', 'utf-8')
         confidence = detector_results.get('confidence', 1.0)
 
-        # 1. ignore detector if confidence was low
-        # 2. utf-8 is backwards compatible with ascii and supports more characters
-        if confidence < .70 or encoding == 'ascii':
+        # 1. cchardet confidence can sometimes have a value of None (WP-12916 not sure exact cause)
+        # 2. ignore detector if confidence was low
+        # 3. utf-8 is backwards compatible with ascii and supports more characters
+        # 4. just in case if encoding is None, we default to utf-8
+        if confidence is None or confidence < .70 or encoding is None or encoding == 'ascii':
             encoding = 'utf-8'
 
         table['encoding'] = encoding
