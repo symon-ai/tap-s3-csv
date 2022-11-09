@@ -340,10 +340,6 @@ class Transformer:
             return False, None
 
     def _transform(self, data, typ, schema, path, source_type=None):
-        # LOGGER.info('doing transform')
-        # LOGGER.info(f'data: {data}')
-        # LOGGER.info(f'type: {typ}')
-        # LOGGER.info(f'source_type: {source_type}')
         if source_type:
             success, result = self._get_transformvalue_by_type(
                 data, source_type)
