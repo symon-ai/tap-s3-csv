@@ -159,9 +159,6 @@ class Transformer:
 
         success, transformed_data = self.transform_recur(data, schema, [])
         if not success:
-            print('SCHEMA MISMATCH')
-            print(data)
-            print(schema)
             raise SchemaMismatch(self.errors)
 
         return transformed_data
