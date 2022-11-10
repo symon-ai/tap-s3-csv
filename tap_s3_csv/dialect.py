@@ -123,8 +123,11 @@ def detect_dialect(config, s3_file, table):
         detector.close()
         detector_results = detector.result
 
-        encoding = detector_results.get('encoding', 'utf-8')
-        confidence = detector_results.get('confidence', 1.0)
+        encoding = detector_results.get('encoding')
+        confidence = detector_results.get('confidence')
+
+        encoding = encoding if encoding is not None else 'utf-8'
+        confidence = confidence if confidence is not None else 1.0
 
         # 1. ignore detector if confidence was low
         # 2. utf-8 is backwards compatible with ascii and supports more characters
