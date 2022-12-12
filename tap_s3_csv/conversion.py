@@ -9,7 +9,7 @@ def infer(key, datum, date_overrides, check_second_call=False):
     """
     Returns the inferred data type
     """
-    if datum is None or datum == '':
+    if datum is None:
         return None
 
     try:
@@ -50,10 +50,6 @@ def infer(key, datum, date_overrides, check_second_call=False):
 
 def process_sample(sample, counts, lengths, table_spec):
     for key, value in sample.items():
-        # skip column names that are None
-        if key is None:
-            continue
-
         if key not in counts:
             counts[key] = {}
 
