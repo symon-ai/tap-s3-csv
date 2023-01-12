@@ -11,6 +11,10 @@ def infer(key, datum, date_overrides, check_second_call=False):
     """
     if datum is None:
         return None
+    
+    # empty-string is temporary type to distinguish emptry string from string
+    if datum == '':
+        return 'empty-string'
 
     try:
         if isinstance(datum, list):
@@ -103,6 +107,15 @@ def generate_schema(samples, table_spec, string_max_length: bool):
     for sample in samples:
         # {'name' : { 'string' : 45}}, {'name': 10}
         counts, lengths = process_sample(sample, counts, lengths, table_spec)
+
+    for key, value in counts.items():
+        if 'empty-string' in value:
+            # csv module seems to parse None as empty string when reading csv and we pick integer and number
+            # in pick_datatype only if there is no other non-integer or non-number type inferred.
+            # workaround by only taking empty-string into account when there is no number or integer type inferred.
+            if 'number' not in value and 'integer' not in value:
+                value['string'] = value.get('string', 0) + value['empty-string']
+            del value['empty-string']
 
     schema = {}
     for key, value in counts.items():
