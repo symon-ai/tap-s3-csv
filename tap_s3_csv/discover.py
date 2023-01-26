@@ -13,8 +13,7 @@ def discover_streams(config):
 
 
 def discover_schema(config, table_spec):
-    sampled_schema, date_format_map = s3.get_sampled_schema_for_table(config, table_spec)
-    return sampled_schema, date_format_map
+    return s3.get_sampled_schema_for_table(config, table_spec)
 
 
 def load_metadata(table_spec, schema):
