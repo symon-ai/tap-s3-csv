@@ -102,13 +102,13 @@ def get_sampled_schema_for_table(config, table_spec):
             'properties': {}
         }
 
-    data_schema = conversion.generate_schema(
+    data_schema, date_format_map = conversion.generate_schema(
         samples, table_spec, config.get('string_max_length', False))
 
     return {
         'type': 'object',
         'properties': data_schema
-    }
+    }, date_format_map
 
 
 def merge_dicts(first, second):
