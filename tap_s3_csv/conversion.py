@@ -101,7 +101,7 @@ def infer_datetime_and_format(column, dateFormatMap):
         # Choose one cell to check if '/' is in the value and update dateFormatMap correctly
         cell = column.dropna().min()
         column = pd.to_datetime(column, format='%Y-%m-%d')
-        dateFormatMap[column.name] = 'YYYY/MM/DD' if '/' in cell else 'YYYY-MM-DD'
+        # dateFormatMap[column.name] = 'YYYY/MM/DD' if '/' in cell else 'YYYY-MM-DD'
         return True
     except Exception as e:
         pass
