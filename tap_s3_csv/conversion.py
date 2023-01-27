@@ -99,10 +99,10 @@ def infer_datetime_and_format(column, dateFormatMap):
         # e.g '2022-01-02' and '2022/01/02' would both pass pd.to_datetime using formats '%Y-%m-%d'
         # and '%Y/%m/%d'
         # Choose one cell to check if '/' is in the value and update dateFormatMap correctly
-        cell = column.dropna().min()
+        cell = column[column.astype(bool)].min() # Only consider non-blank rows
         column = pd.to_datetime(column, format='%Y-%m-%d')
         dateFormatMap[column.name] = 'YYYY/MM/DD' if '/' in cell else 'YYYY-MM-DD'
-        return False
+        return True
     except Exception as e:
         pass
 
