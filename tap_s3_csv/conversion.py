@@ -237,14 +237,9 @@ def generate_schema(samples, table_spec, string_max_length: bool):
 
 def datatype_schema(datatype, length, string_max_length: bool):
     if datatype == 'date-time':
-        schema = {
-            'anyOf': [
-                {'type': ['null', 'string'], 'format': 'date-time'},
-                {'type': ['null', 'string']}
-            ]
-        }
+        schema = {'type': ['null', 'string'], 'format': 'date-time'}
         if string_max_length:
-            schema['anyOf'][1]['maxLength'] = length
+            schema['maxLength'] = length
     elif datatype == 'dict':
         schema = {
             'anyOf': [
