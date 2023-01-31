@@ -48,12 +48,14 @@ def infer_datetime(column, dateFormatMap):
 
 
 def infer_datetime_and_format(column, dateFormatMap):
+    column = column[column.astype(bool)] # Ignore empty strings/blank rows - they fail parsing for all but the first format
+
     try:
         # Formats '%Y-%m-%d' and '%Y/%m/%d' seem work interchangeably in pd.to_datetime function
         # e.g '2022-01-02' and '2022/01/02' would both pass pd.to_datetime using formats '%Y-%m-%d'
         # and '%Y/%m/%d'
         # Choose one cell to check if '/' is in the value and update dateFormatMap correctly
-        cell = column[column.astype(bool)].min() # Only consider non-blank rows
+        cell = column.min()
         column = pd.to_datetime(column, format='%Y-%m-%d')
         dateFormatMap[column.name] = 'YYYY/MM/DD' if '/' in cell else 'YYYY-MM-DD'
         return True
@@ -92,6 +94,7 @@ def infer_datetime_and_format(column, dateFormatMap):
 
 
 def infer_boolean(column):
+    column = column.replace('', np.nan) # Replace empty strings with NaN so they are properly handled
     unique_values = column.unique()
 
     if len(unique_values) == 0:
