@@ -60,7 +60,7 @@ def truncate_headers(fieldnames):
 
     # update fieldname_to_index to include first occurring index of column name for column names that don't need truncation
     for index, fieldname in enumerate(fieldnames):
-        if pd.isna(fieldname) or fieldname == '' or len(fieldname) > MAX_COL_LENGTH:
+        if fieldname is None or fieldname == '' or len(fieldname) > MAX_COL_LENGTH:
             continue
 
         fieldname_lowercase = fieldname.casefold()
@@ -70,7 +70,7 @@ def truncate_headers(fieldnames):
 
     # update fieldname_to_index map to include first occurring index of column name for column names that need truncation
     for index, fieldname in enumerate(fieldnames):
-        if pd.isna(fieldname) or fieldname == '' or len(fieldname) <= MAX_COL_LENGTH:
+        if fieldname is None or fieldname == '' or len(fieldname) <= MAX_COL_LENGTH:
             continue
 
         fieldname = fieldname[:MAX_COL_LENGTH]
@@ -87,7 +87,7 @@ def truncate_headers(fieldnames):
     #   if index is the first occurring index for given fieldname, use it
     #   else, resolve duplicate by adding "_{id}"
     for index, fieldname in enumerate(fieldnames):
-        if pd.isna(fieldname) or fieldname == '':
+        if fieldname is None or fieldname == '':
             continue
 
         if len(fieldname) > MAX_COL_LENGTH:
