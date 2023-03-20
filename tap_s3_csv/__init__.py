@@ -93,6 +93,7 @@ def validate_table_config(config):
 
 @singer.utils.handle_top_exception(LOGGER)
 def main():
+    t1 = time.perf_counter()
     args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS)
     config = args.config
 
@@ -122,6 +123,9 @@ def main():
         do_discover(args.config)
     elif args.properties:
         do_sync(config, args.properties, args.state)
+
+    t2 = time.perf_counter()
+    LOGGER.info(f'TerrOptTesting: Entire tap-s3-csv execution: {t2 - t1} sec')
 
 
 if __name__ == '__main__':
