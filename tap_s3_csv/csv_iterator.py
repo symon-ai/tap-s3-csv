@@ -1,15 +1,26 @@
 import codecs
 import csv
+# from tap_s3_csv.preprocess import PreProcessor
 
 MAX_COL_LENGTH = 150
 
 
-def get_row_iterator(iterable, options=None):
+def get_row_iterator(file_stream, field_names, options=None):
     options = options or {}
-    file_stream = codecs.iterdecode(
-        iterable.iter_lines(), encoding=options.get('encoding', 'utf-8'), errors='replace')
+    print('---get_row_iterator---')
+    print(field_names)
+    # file_stream = codecs.iterdecode(
+    #     iterable.iter_lines(), encoding=options.get('encoding', 'utf-8'), errors='replace')
 
-    field_names = None
+    # field_names = None
+    # file_stream, field_names = PreProcessor.handle_skip_header(iterable, options)
+    # print('---options---')
+    # print(options)
+    # if options.get('skip_header') is not None:
+    #     print(options.get('skip_header'))
+    #     for i in range(options.get('skip_header')):
+    #         next(file_stream)
+        
 
     # Replace any NULL bytes in the line given to the DictReader
     reader = csv.DictReader(
@@ -19,6 +30,8 @@ def get_row_iterator(iterable, options=None):
         escapechar=options.get('escape_char', '\\'),
         quotechar=options.get('quotechar', '"'))
 
+    print('---fieldnames---')
+    print(reader.fieldnames)
     if (reader.fieldnames is None):
         raise Exception('File is empty.')
 

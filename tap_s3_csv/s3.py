@@ -22,7 +22,8 @@ from singer_encodings import compression
 from tap_s3_csv import (
     utils,
     conversion,
-    csv_iterator
+    csv_iterator,
+    preprocess
 )
 
 LOGGER = singer.get_logger()
@@ -90,6 +91,8 @@ def get_sampled_schema_for_table(config, table_spec):
 
     samples = [sample for sample in sample_files(
         config, table_spec, s3_files_gen)]
+    print('----get_sampled_schema_for_table samples---')
+    print(samples)
 
     if skipped_files_count:
         LOGGER.warning(
@@ -140,17 +143,29 @@ def maximize_csv_field_width():
                     field_size_limit)
 
 
-def get_records_for_csv(s3_path, sample_rate, iterator):
+def get_records_for_csv(s3_path, sample_rate, iterator, preprocessor):
 
     current_row = 0
     sampled_row_count = 0
 
     maximize_csv_field_width()
+    
+    # handle first row
+    if preprocessor.first_row is not None:
+        preprocessed_row = preprocessor.preprocess_row(preprocessor.first_row)
+        current_row += 1
+        if preprocessed_row is not None and len(preprocessed_row) != 0:
+            sampled_row_count += 1
+            print(preprocessed_row)
+            yield preprocessed_row
+
 
     for row in iterator:
+        preprocessed_row = preprocessor.preprocess_row(row)
+        print(preprocessed_row)
 
         # Skipping the empty line of CSV.
-        if len(row) == 0:
+        if preprocessed_row is None or len(preprocessed_row) == 0:
             current_row += 1
             continue
 
@@ -159,9 +174,12 @@ def get_records_for_csv(s3_path, sample_rate, iterator):
             if (sampled_row_count % 200) == 0:
                 LOGGER.info("Sampled %s rows from %s",
                             sampled_row_count, s3_path)
-            yield row
+            yield preprocessed_row
 
-        current_row += 1
+    print(f'sampled_row_count: {sampled_row_count}')
+    if sampled_row_count == 0:
+        #TODO improve err msg
+        raise Exception(f'No rows sampled with preprocess.')
 
     LOGGER.info("Sampled %s rows from %s", sampled_row_count, s3_path)
 
@@ -265,10 +283,13 @@ def sample_file(table_spec, s3_path, file_handle, sample_rate, extension):
         return []
     if extension in ["csv", "txt"]:
         # If file object read from s3 bucket file else use extracted file object from zip or gz
-        iterator = csv_iterator.get_row_iterator(file_handle, table_spec)
+        file_stream = preprocess.get_file_iter(file_handle, table_spec.get('encoding', 'utf-8'))
+        preprocessor = preprocess.Preprocessor(table_spec)
+        field_names = preprocessor.preprocess_header(file_stream, table_spec.get('delimiter', ','))
+        iterator = csv_iterator.get_row_iterator(file_stream, field_names, table_spec)
         csv_records = []
         if iterator:
-            csv_records = get_records_for_csv(s3_path, sample_rate, iterator)
+            csv_records = get_records_for_csv(s3_path, sample_rate, iterator, preprocessor)
         else:
             LOGGER.warning('Skipping "%s" file as it is empty', s3_path)
             skipped_files_count = skipped_files_count + 1
@@ -388,6 +409,9 @@ def sample_files(config, table_spec, s3_files,
                     max_records,
                     sample_rate)
         try:
+            print('---config---')
+            print(config)
+            print(table_spec)
             yield from itertools.islice(sample_file(table_spec, s3_path, file_handle, sample_rate, extension), max_records)
         except (UnicodeDecodeError, json.decoder.JSONDecodeError):
             # UnicodeDecodeError will be raised if non csv file parsed to csv parser

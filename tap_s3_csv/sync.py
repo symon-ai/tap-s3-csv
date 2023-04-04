@@ -14,7 +14,8 @@ from tap_s3_csv import (
     s3,
     csv_iterator,
     transform,
-    messages
+    messages,
+    preprocess
 )
 
 
@@ -215,8 +216,11 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream, json_lib='si
     # need to be fixed. The other consequence of this could be larger
     # memory consumption but that's acceptable as well.
     csv.field_size_limit(sys.maxsize)
-
-    iterator = csv_iterator.get_row_iterator(file_handle, table_spec)
+    # set up preprocess
+    file_stream = preprocess.get_file_iter(file_handle, table_spec.get('encoding', 'utf-8'))
+    preprocessor = preprocess.Preprocessor(table_spec)
+    field_names = preprocessor.preprocess_header(file_stream, table_spec.get('delimiter', ','))
+    iterator = csv_iterator.get_row_iterator(file_stream, field_names, table_spec)
 
     records_synced = 0
     records_buffer = []
@@ -231,13 +235,24 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream, json_lib='si
         # e.g. ['null', 'integer'] -> ['integer', 'null']
         tfm.transform_schema_recur(stream['schema'])
 
+        
+        if preprocessor.first_row is not None:
+            first_row = tfm.transform(
+                preprocessor.first_row, stream['schema'], auto_fields, filter_fields)
+            preprocessed_row = preprocessor.preprocess_row(first_row)
+            if preprocessed_row is not None and len(preprocessed_row) > 0:
+                records_buffer.append(preprocessed_row)
+
+
         for row in iterator:
+            preprocessed_row = preprocessor.preprocess_row(row)
+
             # Skipping the empty line of CSV
-            if len(row) == 0:
+            if preprocessed_row is None or len(preprocessed_row) == 0:
                 continue
             # LOGGER.info(f'row: {row}')
             to_write = tfm.transform(
-                row, stream['schema'], auto_fields, filter_fields)
+                preprocessed_row, stream['schema'], auto_fields, filter_fields)
             tfm.cleanup()
 
             records_buffer.append(to_write)

@@ -33,6 +33,10 @@ def detect_dialect(config, s3_file, table):
 
     if not detect_encoding and not detect_delimiter and not detect_quotechar:
         return
+    print('---detect_dialect---')
+    print(f'detect_delimiter: {detect_delimiter}')
+    print(f'detect_quotechar: {detect_quotechar}')
+    print(f'detect_encoding: {detect_encoding}')
 
     # clevercsv is good but slow - we cap it at 2000 rows, which is 1s of runtime on my machine
     MAX_DIALECT_LINES = 2000
@@ -69,6 +73,7 @@ def detect_dialect(config, s3_file, table):
     file_key = s3_file.get('key')
     file_handle = s3.get_file_handle(config, file_key)
     file_iter = file_handle.iter_lines()
+    
     bytes_read = 0
     for i in range(MAX_LINES):
         try:
@@ -128,12 +133,15 @@ def detect_dialect(config, s3_file, table):
 
         encoding = detector_results.get('encoding', 'utf-8')
         confidence = detector_results.get('confidence', 1.0)
+        print(detector_results)
+        print(encoding)
+        print(confidence)
 
         # 1. cchardet confidence can sometimes have a value of None (WP-12916 not sure exact cause)
         # 2. ignore detector if confidence was low
         # 3. just in case if encoding is None, we default to utf-8
         # 4. utf-8 is backwards compatible with ascii and supports more characters
-        if confidence is None or confidence < .70 or encoding is None or encoding == 'ascii':
+        if confidence is None or confidence < .70 or encoding is None or encoding.casefold() == 'ascii':
             encoding = 'utf-8'
 
         table['encoding'] = encoding
@@ -190,3 +198,5 @@ def detect_dialect(config, s3_file, table):
             table['delimiter'] = delimiter
         if detect_quotechar:
             table['quotechar'] = quotechar
+    print('---detected dialect---')
+    print(table)

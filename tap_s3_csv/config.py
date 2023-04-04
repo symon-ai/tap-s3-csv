@@ -9,5 +9,8 @@ CONFIG_CONTRACT = Schema([{
     Optional('delimiter'): str,
     Optional('escape_char'): str,
     Optional('recursive_search'): bool,
-    Optional('quotechar'): str
+    Optional('quotechar'): str,
+    Optional('skip_header'): int,
+    Optional('skip_footer'): int,
+    Optional('has_header'): bool
 }])
