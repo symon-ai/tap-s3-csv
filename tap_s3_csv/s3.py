@@ -22,7 +22,8 @@ from singer_encodings import compression
 from tap_s3_csv import (
     utils,
     conversion,
-    csv_iterator
+    csv_iterator,
+    preprocess
 )
 
 LOGGER = singer.get_logger()
@@ -162,6 +163,9 @@ def get_records_for_csv(s3_path, sample_rate, iterator):
             yield row
 
         current_row += 1
+    if sampled_row_count == 0:
+        #TODO improve err msg
+        raise Exception(f'No rows sampled after skipping and ignoring rows')
 
     LOGGER.info("Sampled %s rows from %s", sampled_row_count, s3_path)
 
@@ -265,7 +269,9 @@ def sample_file(table_spec, s3_path, file_handle, sample_rate, extension):
         return []
     if extension in ["csv", "txt"]:
         # If file object read from s3 bucket file else use extracted file object from zip or gz
-        iterator = csv_iterator.get_row_iterator(file_handle, table_spec)
+        preprocess_file_handle = preprocess.PreprocessStream(file_handle, table_spec)
+        fieldnames = preprocess_file_handle.get_headers(table_spec)
+        iterator = csv_iterator.get_row_iterator(preprocess_file_handle, fieldnames, table_spec)
         csv_records = []
         if iterator:
             csv_records = get_records_for_csv(s3_path, sample_rate, iterator)
@@ -530,10 +536,10 @@ class GetFileRangeStream:
             raise ValueError(
                 f'start byte should be smaller than file size {file_size}')
 
-        # always return header first, after this each chunk iteration will discard first row but include partial row at the end
-        headers = self.__get_headers__()
-        LOGGER.info(f'headers: {headers}')
-        yield headers
+        # when iterating chunks to get rows, we always skip first row to consider the case where the row overlaps
+        # with previous chunk and handle it separately. First row on first chunk iss not handled so need to yield it
+        if self.start_byte == 0:
+            yield self.__get_first_row__()
 
         eol = self.__get_eol__()
 
@@ -632,7 +638,7 @@ class GetFileRangeStream:
         #LOGGER.info(f'total no of S3 calls: {count_s3_calls}')
 
     @retry_pattern()
-    def __get_headers__(self):
+    def __get_first_row__(self):
         iter_chunks = self.__get_object_iter_chunks__(
             iter_start_byte=0, iter_end_byte=self.chunk_size)
 
