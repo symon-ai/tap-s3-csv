@@ -91,6 +91,7 @@ def get_sampled_schema_for_table(config, table_spec):
 
     samples = [sample for sample in sample_files(
         config, table_spec, s3_files_gen)]
+    LOGGER.info(f'sampled: {samples}')
 
     if skipped_files_count:
         LOGGER.warning(
@@ -269,9 +270,9 @@ def sample_file(table_spec, s3_path, file_handle, sample_rate, extension):
         return []
     if extension in ["csv", "txt"]:
         # If file object read from s3 bucket file else use extracted file object from zip or gz
-        preprocess_file_handle = preprocess.PreprocessStream(file_handle, table_spec)
-        fieldnames = preprocess_file_handle.get_headers(table_spec)
-        iterator = csv_iterator.get_row_iterator(preprocess_file_handle, fieldnames, table_spec)
+        preprocess_file_handle = preprocess.PreprocessStream(file_handle, table_spec, True)
+        fieldnames = preprocess_file_handle.header
+        iterator = csv_iterator.get_row_iterator(preprocess_file_handle, table_spec, fieldnames)
         csv_records = []
         if iterator:
             csv_records = get_records_for_csv(s3_path, sample_rate, iterator)

@@ -4,7 +4,7 @@ import csv
 MAX_COL_LENGTH = 150
 
 
-def get_row_iterator(iterable, fieldnames, options=None):
+def get_row_iterator(iterable, options=None, fieldnames=None):
     options = options or {}
     file_stream = codecs.iterdecode(
         iterable.iter_lines(), encoding=options.get('encoding', 'utf-8'), errors='replace')
@@ -129,4 +129,3 @@ def handle_empty_fieldnames(fieldnames, options):
         final_fieldnames.append(fieldname)
 
     return final_fieldnames
-

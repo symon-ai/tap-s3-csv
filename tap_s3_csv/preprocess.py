@@ -2,11 +2,12 @@ from queue import Queue
 
 # Wrapper class for file streams. Handles preprocessing (skipping header rows, footer rows, detecting headers)
 class PreprocessStream():
-    def __init__(self, file_handle, table_spec):
+    def __init__(self, file_handle, table_spec, handle_first_row):
         # self.file_iterator = iter(file_handle.iter_lines())
         self.file_iterator = file_handle.iter_lines()
         self.first_row = None
         self.queue = None
+        self.header = None
 
         skip_header_row = table_spec.get('skip_header_row', 0)
         skip_footer_row = table_spec.get('skip_footer_row', 0)
@@ -15,50 +16,12 @@ class PreprocessStream():
             self._skip_header_rows(skip_header_row)
         if skip_footer_row > 0:
             self.queue = Queue(maxsize = skip_footer_row)
+        if handle_first_row:
+            has_header = table_spec.get('has_header', True)
+            encoding = table_spec.get('encoding', 'utf-8')
+            delimiter = table_spec.get('delimiter', ',')
+            self._handle_first_row(has_header, encoding, delimiter)
     
-    def get_headers(self, table_spec):
-        has_header = table_spec.get('has_header', True)
-        fieldnames = None
-
-        # if headers exist, let csv.DictReader grab the header. csv.DictReader automatically skips empty rows
-        # and uses first valid row as header
-        if has_header:
-            return fieldnames
-        
-        first_row = self._skip_empty_rows()
-        delimiter = table_spec.get('delimiter', ',')
-        encoding = table_spec.get('encoding', 'utf-8')
-
-        first_row_list = first_row.decode(encoding).split(delimiter)
-        fieldnames = [f'col_{i}' for i in range(len(first_row_list))]
-        
-        # has_header is false, so first row is record, not header. save it to yield later
-        self.first_row = first_row
-
-        return fieldnames
-
-    def move_to_first_row(self, has_header):
-        first_row = self._skip_empty_rows()
-        if not has_header:
-            # has_header is false, so first row is record, not header. save it to yield later
-            self.first_row = first_row
-
-    def iter_lines(self):
-        if self.first_row is not None:
-            if self.queue is None:
-                yield self.first_row
-                self.first_row = None
-            else:
-                self.queue.put(self.first_row)
-        
-        for row in self.file_iterator:
-            if self.queue is None:
-                yield row
-            else:
-                if self.queue.full():
-                    yield self.queue.get()
-                self.queue.put(row)
-
     def _skip_header_rows(self, skip_header_row):
         try:
             for _ in range(skip_header_row):
@@ -76,3 +39,33 @@ class PreprocessStream():
         except StopIteration:
             raise Exception(f'No more data other than empty rows')
         return first_row
+    
+    def _handle_first_row(self, has_header, encoding, delimiter):
+        first_row = self._skip_empty_rows()
+        first_row_list = first_row.decode(encoding).split(delimiter)
+        
+        # first row is header row, don't need to store first_row as it is not a record
+        if has_header:
+            self.header = first_row_list
+            return
+        
+        # first row is a record, need to store it so we can yield it in iter_lines
+        self.first_row = first_row
+        fieldnames = [f'col_{i}' for i in range(len(first_row_list))]
+        self.header = fieldnames
+
+    def iter_lines(self):
+        if self.first_row is not None:
+            if self.queue is None:
+                yield self.first_row
+                self.first_row = None
+            else:
+                self.queue.put(self.first_row)
+        
+        for row in self.file_iterator:
+            if self.queue is None:
+                yield row
+            else:
+                if self.queue.full():
+                    yield self.queue.get()
+                self.queue.put(row)
