@@ -3,7 +3,6 @@ from queue import Queue
 # Wrapper class for file streams. Handles preprocessing (skipping header rows, footer rows, detecting headers)
 class PreprocessStream():
     def __init__(self, file_handle, table_spec, handle_first_row):
-        # self.file_iterator = iter(file_handle.iter_lines())
         self.file_iterator = file_handle.iter_lines()
         self.first_row = None
         self.queue = None
@@ -25,18 +24,17 @@ class PreprocessStream():
     def _skip_header_rows(self, skip_header_row):
         try:
             for _ in range(skip_header_row):
-                line = next(self.file_iterator)
+                next(self.file_iterator)
         except StopIteration:
-            #TODO improve err msg
-            raise Exception(f'No more data after skipping rows in header')
+            raise Exception(f'preprocess_err: No more data after skipping rows in header.')
 
     def _skip_empty_rows(self):
         try:
             first_row = next(self.file_iterator)
-            while first_row == b'':
+            while first_row == b'' or first_row == b'\n':
                 first_row = next(self.file_iterator)
         except StopIteration:
-            raise Exception(f'No more data other than empty rows')
+            raise Exception(f'preprocess_err: No more data other than empty rows.')
         return first_row
     
     def _handle_first_row(self, has_header, encoding, delimiter):

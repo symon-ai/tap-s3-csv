@@ -91,18 +91,13 @@ def get_sampled_schema_for_table(config, table_spec):
 
     samples = [sample for sample in sample_files(
         config, table_spec, s3_files_gen)]
-    LOGGER.info(f'sampled: {samples}')
 
     if skipped_files_count:
         LOGGER.warning(
             "%s files got skipped during the last sampling.", skipped_files_count)
 
     if not samples:
-        # Return empty properties for accept everything from data if no samples found
-        return {
-            'type': 'object',
-            'properties': {}
-        }
+        raise Exception('File is empty.')
 
     data_schema, date_format_map = conversion.generate_schema(
         samples, table_spec, config.get('string_max_length', False))
@@ -164,9 +159,6 @@ def get_records_for_csv(s3_path, sample_rate, iterator):
             yield row
 
         current_row += 1
-    if sampled_row_count == 0:
-        #TODO improve err msg
-        raise Exception(f'No rows sampled after skipping and ignoring rows')
 
     LOGGER.info("Sampled %s rows from %s", sampled_row_count, s3_path)
 
