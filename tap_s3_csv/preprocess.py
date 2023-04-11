@@ -26,7 +26,6 @@ class PreprocessStream():
         try:
             for _ in range(skip_header_row):
                 line = next(self.file_iterator)
-                print(line)
         except StopIteration:
             #TODO improve err msg
             raise Exception(f'No more data after skipping rows in header')
