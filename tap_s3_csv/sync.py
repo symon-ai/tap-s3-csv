@@ -111,6 +111,10 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
             file_handle = s3.get_csv_file(
                 config['bucket'], s3_path, start_byte, end_byte, range_size)
             LOGGER.info('using S3 Get Range method for csv import')
+            # csv.DictReader will parse the first non-empty row as header if fieldnames == None, else as the first record.
+            # For parallel threads, non-first threads will not be able to grab headers from the first part of the data,
+            # so we need to pass in fieldnames. First thread needs to handle first row in order to avoid having first row parsed
+            # as record when it's actually header. Set handle_first_row param for PreprocessStream to True for first thread.
             file_handle = preprocess.PreprocessStream(file_handle, table_spec, start_byte == 0)
             fieldnames = list(stream['schema']['properties'].keys())
         else:

@@ -530,7 +530,7 @@ class GetFileRangeStream:
                 f'start byte should be smaller than file size {file_size}')
 
         # when iterating chunks to get rows, we always skip first row to consider the case where the row overlaps
-        # with previous chunk and handle it separately. First row on first chunk iss not handled so need to yield it
+        # with previous chunk and handle it separately. First row in first chunk is not handled so we need to yield it
         if self.start_byte == 0:
             yield self.__get_first_row__()
 

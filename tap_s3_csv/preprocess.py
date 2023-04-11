@@ -37,16 +37,17 @@ class PreprocessStream():
             raise Exception(f'preprocess_err: No more data other than empty rows.')
         return first_row
     
+    # grabs first non empty row and process it as header row or first record row depending on has_header
     def _handle_first_row(self, has_header, encoding, delimiter):
         first_row = self._skip_empty_rows()
         first_row_list = first_row.decode(encoding).split(delimiter)
         
-        # first row is header row, don't need to store first_row as it is not a record
+        # first row is header row
         if has_header:
             self.header = first_row_list
             return
         
-        # first row is a record, need to store it so we can yield it in iter_lines
+        # first row is a record, generate headers and store first row so we can yield it in iter_lines
         self.first_row = first_row
         fieldnames = [f'col_{i}' for i in range(len(first_row_list))]
         self.header = fieldnames

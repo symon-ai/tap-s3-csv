@@ -68,6 +68,7 @@ def detect_dialect(config, s3_file, table):
 
     file_key = s3_file.get('key')
     file_handle = s3.get_file_handle(config, file_key)
+    # iterator that handles skip/ignore rows, need it for detecting delimiter, quotechars correctly
     preprocess_file_handle = preprocess.PreprocessStream(file_handle, table, False)
     file_iter = preprocess_file_handle.iter_lines()
     bytes_read = 0
