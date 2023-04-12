@@ -97,11 +97,7 @@ def get_sampled_schema_for_table(config, table_spec):
             "%s files got skipped during the last sampling.", skipped_files_count)
 
     if not samples:
-        # Return empty properties for accept everything from data if no samples found
-        return {
-            'type': 'object',
-            'properties': {}
-        }, {}
+        raise Exception('File is empty.')
 
     data_schema, date_format_map = conversion.generate_schema(
         samples, table_spec, config.get('string_max_length', False))
