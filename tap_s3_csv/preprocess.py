@@ -1,39 +1,63 @@
 from queue import Queue
 import csv
 import codecs
+from tap_s3_csv import s3
 
 # Wrapper class for file streams. Handles preprocessing (skipping header rows, footer rows, detecting headers)
 class PreprocessStream():
-    def __init__(self, file_handle, table_spec, handle_first_row):
+    def __init__(self, file_handle, table_spec, handle_first_row, s3_path=None, config=None):
         self.file_iterator = file_handle.iter_lines()
         self.first_row = None
         self.queue = None
         self.header = None
-
-        skip_header_row = table_spec.get('skip_header_row', 0)
+        self.skip_header_row = table_spec.get('skip_header_row', 0)
+        
         skip_footer_row = table_spec.get('skip_footer_row', 0)
 
-        if skip_header_row > 0:
-            self._skip_header_rows(skip_header_row)
+        self._skip_header_rows()
         if skip_footer_row > 0:
             self.queue = Queue(maxsize = skip_footer_row)
         if handle_first_row:
-            has_header = table_spec.get('has_header', True)
-            encoding = table_spec.get('encoding', 'utf-8')
-            delimiter = table_spec.get('delimiter', ',')
-            quotechar = table_spec.get('quotechar', '"')
-            escapechar = table_spec.get('escape_char', '\\')
-            self._handle_first_row(has_header, encoding, delimiter, quotechar, escapechar)
-    
-    def _skip_header_rows(self, skip_header_row):
+            self._handle_first_row(table_spec, s3_path, config)
+
+    def _skip_header_rows(self):
         try:
-            for _ in range(skip_header_row):
+            for _ in range(self.skip_header_row):
                 next(self.file_iterator)
         except StopIteration:
             raise Exception(f'preprocess_err: We can’t find any data after the skipped rows in the header.')
     
     # grabs first non empty row and process it as header row or first record row depending on has_header
-    def _handle_first_row(self, has_header, encoding, delimiter, quotechar, escapechar):
+    def _handle_first_row(self, table_spec, s3_path=None, config=None):
+        print('---handle_first_row---')
+        has_header = table_spec.get('has_header', True)
+        first_row_parsed = self._get_first_row(table_spec)
+
+        # first row is header row
+        if has_header:
+            self.header = first_row_parsed
+            return
+        
+        # first row is a record, generate headers 
+        self.header = [f'col_{i}' for i in range(len(first_row_parsed))]
+        # first row has been iterated already, reset file handle so that we don't lose first row and yield
+        # it in iter_lines
+        if s3_path is not None and config is not None:
+            self._reset_file_iterator(s3_path, config)
+
+    def _reset_file_iterator(self, s3_path, config):
+        print('---reset_file_iterator---')
+        file_handle = s3.get_file_handle(config, s3_path)
+        self.file_iterator = file_handle.iter_lines()
+        self._skip_header_rows()
+
+    # grabs first non empty row and process it as header row or first record row depending on has_header
+    def _get_first_row(self, table_spec):
+        encoding = table_spec.get('encoding', 'utf-8')
+        delimiter = table_spec.get('delimiter', ',')
+        quotechar = table_spec.get('quotechar', '"')
+        escapechar = table_spec.get('escape_char', '\\')
+
         # Use csv.DictReader to parse first row and use it as header if has_header == True, else 
         # use it to detect the number of columns and generate headers. We need to use csv.DictReader
         # for parsing first row to handle corner cases such as:
@@ -51,38 +75,9 @@ class PreprocessStream():
         if reader.fieldnames is None:
             raise Exception('File is empty.')
 
-        first_row_parsed = reader.fieldnames
-
-        # first row is header row
-        if has_header:
-            self.header = first_row_parsed
-            return
-        
-        # first row is a record, generate headers 
-        self.header = [f'col_{i}' for i in range(len(first_row_parsed))]
-        
-        # first row has been parsed into array of string, change it back to byte form to yield in iter_lines.
-        first_row_str_form = ''
-        for field in first_row_parsed:
-            # Each field has been parsed into final value by csv.Dictreader after handling delimiters, quotechars and escapechars.
-            # Since csv.DictReader uses quotechar to quote fields containing special chars, such as the delimiter/quote char/newline char,
-            # we can simply wrap fields with quotechar so that csv.DictReader can later parse them into same value.
-            # Make sure to escape escapechars and quotechars that are actually part of fieldname
-            field = field.replace(escapechar, escapechar * 2).replace(quotechar, escapechar + quotechar)
-            first_row_str_form += quotechar + field + quotechar + delimiter
-        # encoder = codecs.getincrementalencoder(encoding)()
-        # first_row_byte_form = encoder.encode(first_row_str_form[:-1])
-        first_row_byte_form = first_row_str_form.encode(encoding=encoding)
-        self.first_row = first_row_byte_form
+        return reader.fieldnames
 
     def iter_lines(self):
-        if self.first_row is not None:
-            if self.queue is None:
-                yield self.first_row
-                self.first_row = None
-            else:
-                self.queue.put(self.first_row)
-        
         for row in self.file_iterator:
             if self.queue is None:
                 yield row

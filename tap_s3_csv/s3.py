@@ -253,7 +253,7 @@ def sampling_gz_file(table_spec, s3_path, file_handle, sample_rate):
 # pylint: disable=global-statement
 
 
-def sample_file(table_spec, s3_path, file_handle, sample_rate, extension):
+def sample_file(table_spec, s3_path, file_handle, sample_rate, extension, config=None):
     global skipped_files_count
 
     # Check whether file is without extension or not
@@ -263,7 +263,7 @@ def sample_file(table_spec, s3_path, file_handle, sample_rate, extension):
         return []
     if extension in ["csv", "txt"]:
         # If file object read from s3 bucket file else use extracted file object from zip or gz
-        preprocess_file_handle = preprocess.PreprocessStream(file_handle, table_spec, True)
+        preprocess_file_handle = preprocess.PreprocessStream(file_handle, table_spec, True, s3_path, config)
         fieldnames = preprocess_file_handle.header
         iterator = csv_iterator.get_row_iterator(preprocess_file_handle, table_spec, fieldnames)
         csv_records = []
@@ -388,7 +388,7 @@ def sample_files(config, table_spec, s3_files,
                     max_records,
                     sample_rate)
         try:
-            yield from itertools.islice(sample_file(table_spec, s3_path, file_handle, sample_rate, extension), max_records)
+            yield from itertools.islice(sample_file(table_spec, s3_path, file_handle, sample_rate, extension, config), max_records)
         except (UnicodeDecodeError, json.decoder.JSONDecodeError):
             # UnicodeDecodeError will be raised if non csv file parsed to csv parser
             # JSONDecodeError will be reaised if non JSONL file parsed to JSON parser

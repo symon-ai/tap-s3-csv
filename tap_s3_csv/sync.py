@@ -115,12 +115,20 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
             # For parallel threads, non-first threads will not be able to grab headers from the first part of the data,
             # so we need to pass in fieldnames. First thread needs to handle first row in order to avoid having first row parsed
             # as record when it's actually header. Set handle_first_row param for PreprocessStream to True for first thread.
-            file_handle = preprocess.PreprocessStream(file_handle, table_spec, start_byte == 0)
+            print('---multi---')
+            file_handle = preprocess.PreprocessStream(file_handle, table_spec, start_byte == 0 and table_spec.get('has_header', True))
             fieldnames = list(stream['schema']['properties'].keys())
+            print('----columns---')
+            print(fieldnames)
+            print(file_handle.header)
         else:
+            print('---single---')
             file_handle = s3.get_file_handle(config, s3_path)
-            file_handle = preprocess.PreprocessStream(file_handle, table_spec, True)
-            fieldnames = file_handle.header
+            file_handle = preprocess.PreprocessStream(file_handle, table_spec, table_spec.get('has_header', True))
+            fieldnames = list(stream['schema']['properties'].keys())
+            print('----columns---')
+            print(fieldnames)
+            print(file_handle.header)
 
         return sync_csv_file(config, file_handle, s3_path, table_spec, stream, json_lib, fieldnames)
 
