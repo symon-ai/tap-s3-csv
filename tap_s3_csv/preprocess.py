@@ -40,7 +40,7 @@ class PreprocessStream():
         # - fields in first row contain newline char wrapped with quotechar or escaped with escapechar
         # - fields in first row contain delimiter wrapped with quotechar or escaped with escapechar
         file_stream = codecs.iterdecode(
-            self.iter_lines(), encoding=encoding, errors='replace')
+            self.file_iterator, encoding=encoding, errors='replace')
         reader = csv.DictReader(
             (line.replace('\0', '') for line in file_stream),
             fieldnames=None,
