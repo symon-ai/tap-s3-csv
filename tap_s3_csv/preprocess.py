@@ -70,8 +70,9 @@ class PreprocessStream():
             # Make sure to escape escapechars and quotechars that are actually part of fieldname
             field = field.replace(escapechar, escapechar * 2).replace(quotechar, escapechar + quotechar)
             first_row_str_form += quotechar + field + quotechar + delimiter
-        encoder = codecs.getincrementalencoder(encoding)()
-        first_row_byte_form = encoder.encode(first_row_str_form[:-1])
+        # encoder = codecs.getincrementalencoder(encoding)()
+        # first_row_byte_form = encoder.encode(first_row_str_form[:-1])
+        first_row_byte_form = first_row_str_form.encode(encoding=encoding)
         self.first_row = first_row_byte_form
 
     def iter_lines(self):
