@@ -29,7 +29,6 @@ class PreprocessStream():
     
     # grabs first non empty row and process it as header row or first record row depending on has_header
     def _handle_first_row(self, table_spec, s3_path=None, config=None):
-        print('---handle_first_row---')
         has_header = table_spec.get('has_header', True)
         first_row_parsed = self._get_first_row(table_spec)
 
@@ -46,7 +45,6 @@ class PreprocessStream():
             self._reset_file_iterator(s3_path, config)
 
     def _reset_file_iterator(self, s3_path, config):
-        print('---reset_file_iterator---')
         file_handle = s3.get_file_handle(config, s3_path)
         self.file_iterator = file_handle.iter_lines()
         self._skip_header_rows()
