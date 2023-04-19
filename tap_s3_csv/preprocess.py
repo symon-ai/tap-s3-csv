@@ -11,7 +11,7 @@ class PreprocessStream():
         self.queue = None
         self.header = None
         self.skip_header_row = table_spec.get('skip_header_row', 0)
-        
+
         skip_footer_row = table_spec.get('skip_footer_row', 0)
 
         self._skip_header_rows()
@@ -27,7 +27,7 @@ class PreprocessStream():
         except StopIteration:
             raise Exception(f'preprocess_err: We can’t find any data after the skipped rows in the header.')
     
-    # grabs first non empty row and process it as header row or first record row depending on has_header
+    # skips empty rows and process first non-empty row as header row or first record row depending on has_header
     def _handle_first_row(self, table_spec, s3_path=None, config=None):
         has_header = table_spec.get('has_header', True)
         first_row_parsed = self._get_first_row(table_spec)
@@ -39,26 +39,25 @@ class PreprocessStream():
         
         # first row is a record, generate headers 
         self.header = [f'col_{i}' for i in range(len(first_row_parsed))]
-        # first row has been iterated already, reset file handle so that we don't lose first row and yield
-        # it in iter_lines
+        # first row has been iterated already, reset file handle so that we don't lose first row and yield it
         if s3_path is not None and config is not None:
             self._reset_file_iterator(s3_path, config)
 
+    # resets file_handle and skips header rows
     def _reset_file_iterator(self, s3_path, config):
         file_handle = s3.get_file_handle(config, s3_path)
         self.file_iterator = file_handle.iter_lines()
         self._skip_header_rows()
 
-    # grabs first non empty row and process it as header row or first record row depending on has_header
+    # grabs first non empty row using csv.DictReader
     def _get_first_row(self, table_spec):
         encoding = table_spec.get('encoding', 'utf-8')
         delimiter = table_spec.get('delimiter', ',')
         quotechar = table_spec.get('quotechar', '"')
         escapechar = table_spec.get('escape_char', '\\')
 
-        # Use csv.DictReader to parse first row and use it as header if has_header == True, else 
-        # use it to detect the number of columns and generate headers. We need to use csv.DictReader
-        # for parsing first row to handle corner cases such as:
+        # csv.DictReader automatically skips empty rows and grabs the first row as header and saves it in it's fieldnames property
+        # if fieldnames passed in is None. Use csv.DictReader to grab the first row as it handles corner cases for header row such as:
         # - fields in first row contain newline char wrapped with quotechar or escaped with escapechar
         # - fields in first row contain delimiter wrapped with quotechar or escaped with escapechar
         file_stream = codecs.iterdecode(

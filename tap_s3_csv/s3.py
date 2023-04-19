@@ -262,7 +262,10 @@ def sample_file(table_spec, s3_path, file_handle, sample_rate, extension, config
         skipped_files_count = skipped_files_count + 1
         return []
     if extension in ["csv", "txt"]:
-        # If file object read from s3 bucket file else use extracted file object from zip or gz
+        # file_hanedle: If file object read from s3 bucket file else use extracted file object from zip or gz
+        # preprocess: For discovery, we need to set handle_first_row param to True so that we can set column headers 
+        # correctly. Need to pass in s3_path and config for resetting the file handle so that we don't lose first row
+        # after parsing it to generate headers if table_spec.has_header == False
         preprocess_file_handle = preprocess.PreprocessStream(file_handle, table_spec, True, s3_path, config)
         fieldnames = preprocess_file_handle.header
         iterator = csv_iterator.get_row_iterator(preprocess_file_handle, table_spec, fieldnames)
