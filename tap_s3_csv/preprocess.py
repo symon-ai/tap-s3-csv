@@ -57,7 +57,7 @@ class PreprocessStream():
         escapechar = table_spec.get('escape_char', '\\')
 
         # csv.DictReader automatically skips empty rows and grabs the first row as header and saves it in it's fieldnames property
-        # if fieldnames passed in is None. Use csv.DictReader to grab the first row as it handles corner cases for header row such as:
+        # if fieldnames passed in is None. Use csv.DictReader to grab the first row as it handles corner cases for row such as:
         # - fields in first row contain newline char wrapped with quotechar or escaped with escapechar
         # - fields in first row contain delimiter wrapped with quotechar or escaped with escapechar
         file_stream = codecs.iterdecode(
