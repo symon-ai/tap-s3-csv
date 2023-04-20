@@ -119,7 +119,6 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
             file_handle = preprocess.PreprocessStream(file_handle, table_spec, start_byte == 0 and table_spec.get('has_header', True))
             fieldnames = list(stream['schema']['properties'].keys())
         else:
-            LOGGER.info('using single thread for csv import')
             file_handle = s3.get_file_handle(config, s3_path)
             # same as above but for single thread. Set handle_first_row param to True if table_spec.has_header == True to avoid
             # having header row parsed as first record
