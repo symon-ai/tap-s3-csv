@@ -134,8 +134,8 @@ def main():
             'code': e.code
         }
 
-        if e.keywords is not None:
-            error_info['keywords'] = e.keywords
+        if e.details is not None:
+            error_info['details'] = e.details
         raise
     except BaseException as e:
         error_info = {
