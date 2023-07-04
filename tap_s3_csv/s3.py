@@ -98,7 +98,7 @@ def get_sampled_schema_for_table(config, table_spec):
             "%s files got skipped during the last sampling.", skipped_files_count)
 
     if not samples:
-        raise SymonException('File is empty', 'data.import.EmptyFile')
+        raise SymonException('File is empty', 'EmptyFile')
 
     data_schema, date_format_map = conversion.generate_schema(
         samples, table_spec, config.get('string_max_length', False))
@@ -164,7 +164,7 @@ def get_records_for_csv(s3_path, sample_rate, iterator):
 
         LOGGER.info("Sampled %s rows from %s", sampled_row_count, s3_path)
     except UnicodeError:
-        raise SymonException('Please ensure that your file has UTF-8 or UTF-16 encoding.', 'data.import.UnsupportedEncoding')
+        raise SymonException('Please ensure that your file has UTF-8 or UTF-16 encoding.', 'UnsupportedEncoding')
 
 
 def get_records_for_jsonl(s3_path, sample_rate, iterator):
@@ -462,7 +462,7 @@ def get_input_files_for_table(config, table_spec, modified_since=None):
         if skipped_files_count > 0 and unmatched_files_count == 0:
             # Symon imports only one file at a time where only one file is uploaded in s3 bucket/prefix location. 
             # If skipped_files_count > 0, it must mean that the file has been skipped due to being empty file.
-            raise SymonException('File is empty.', 'data.import.EmptyFile')
+            raise SymonException('File is empty.', 'EmptyFile')
         raise Exception("No files found matching pattern {}".format(pattern))
 
 

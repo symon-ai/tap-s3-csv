@@ -27,7 +27,7 @@ class PreprocessStream():
                 next(self.file_iterator)
         except StopIteration:
             raise SymonException(
-                f"We can't find any data after the skipped rows in the header. Please check skip/ignore configuration.", 'data.import.PreprocessError')
+                f"We can't find any data after the skipped rows in the header. Please check skip/ignore configuration.", 'PreprocessError')
 
     # skips empty rows and process first non-empty row as header row or first record row depending on has_header
     def _handle_first_row(self, table_spec, s3_path=None, config=None):
@@ -73,7 +73,7 @@ class PreprocessStream():
 
         if reader.fieldnames is None:
             raise SymonException(
-                "We can't find any data. Please check skip/ignore configuration.", 'data.import.PreprocessError')
+                "We can't find any data. Please check skip/ignore configuration.", 'PreprocessError')
 
         return reader.fieldnames
 
