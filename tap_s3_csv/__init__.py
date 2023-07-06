@@ -154,8 +154,8 @@ def main():
                     pass
             # log error info as well in case file is corrupted
             error_info_json = json.dumps(error_info)
-            error_start_marker = args.config.get(error_start_marker, '[tap_error_start]')
-            error_end_marker = args.config.get(error_end_marker, '[tap_error_end]')
+            error_start_marker = args.config.get('error_start_marker', '[tap_error_start]')
+            error_end_marker = args.config.get('error_end_marker', '[tap_error_end]')
             LOGGER.info(f'{error_start_marker}{error_info_json}{error_end_marker}')
 
 
