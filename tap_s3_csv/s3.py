@@ -164,7 +164,7 @@ def get_records_for_csv(s3_path, sample_rate, iterator):
 
         LOGGER.info("Sampled %s rows from %s", sampled_row_count, s3_path)
     except UnicodeError:
-        raise SymonException('Please ensure that your file has UTF-8 or UTF-16 encoding.', 'UnsupportedEncoding')
+        raise SymonException("Sorry, we can't decode your file. Please try using UTF-8 or UTF-16 encoding for your file.", 'UnsupportedEncoding')
 
 
 def get_records_for_jsonl(s3_path, sample_rate, iterator):

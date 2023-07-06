@@ -270,7 +270,7 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream, json_lib='si
                     records_synced += len(records_buffer)
                     records_buffer.clear()
         except UnicodeError:
-            raise SymonException('Please ensure that your file has UTF-8 or UTF-16 encoding.', 'UnsupportedEncoding')
+            raise SymonException("Sorry, we can't decode your file. Please try using UTF-8 or UTF-16 encoding for your file.", 'UnsupportedEncoding')
     else:
         LOGGER.warning('Skipping "%s" file as it is empty', s3_path)
         s3.skipped_files_count = s3.skipped_files_count + 1
