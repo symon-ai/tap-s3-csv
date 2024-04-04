@@ -3,6 +3,7 @@ import csv
 import io
 import json
 import gzip
+import time
 
 from singer import metadata
 from singer import utils as singer_utils
@@ -244,8 +245,11 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream, json_lib='si
 
     records_synced = 0
     records_buffer = []
-
+    
+    sync_csv_file_start = time.time()
+    
     if iterator:
+        before_try_start = time.time()
         mdata = metadata.to_map(stream['metadata'])
         auto_fields, filter_fields, source_type_map = transform.resolve_filter_fields(
             mdata)
@@ -254,32 +258,50 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream, json_lib='si
         # modify schema in-place to put null as the last type to check for
         # e.g. ['null', 'integer'] -> ['integer', 'null']
         tfm.transform_schema_recur(stream['schema'])
+        before_try_end = time.time()
+        LOGGER.info(f"Time taken to resolve filter fields: {before_try_end - before_try_start}")
 
         try:
+            LOGGER.info("hitting the tfm.......")
+            tfm_time_usage = 0
+            write_time_usage = 0
+            
             for row in iterator:
                 # Skipping the empty line of CSV
+                
                 if len(row) == 0:
                     continue
-                # LOGGER.info(f'row: {row}')
+                tfm_start = time.time()
                 to_write = tfm.transform(
                     row, stream['schema'], auto_fields, filter_fields)
                 tfm.cleanup()
+                tfm_end = time.time()
+                tfm_time_usage += tfm_end - tfm_start
 
+                write_start = time.time()
                 records_buffer.append(to_write)
 
                 if len(records_buffer) >= BUFFER_SIZE:
                     messages.write_records(table_name, records_buffer, json_lib)
                     records_synced += len(records_buffer)
                     records_buffer.clear()
+                write_end = time.time()
+                write_time_usage += write_end - write_start
         except UnicodeError:
             raise SymonException("Sorry, we can't decode your file. Please try using UTF-8 or UTF-16 encoding for your file.", 'UnsupportedEncoding')
     else:
         LOGGER.warning('Skipping "%s" file as it is empty', s3_path)
         s3.skipped_files_count = s3.skipped_files_count + 1
+    
+    sync_csv_file_end = time.time()
+    read_time = sync_csv_file_end - sync_csv_file_start - tfm_time_usage - write_time_usage
+    LOGGER.info(f"Time taken to read the data: {read_time}")
 
     if len(records_buffer) > 0:
         messages.write_records(table_name, records_buffer, json_lib)
         records_synced += len(records_buffer)
+    LOGGER.info(f"Time taken to transform the data: {tfm_time_usage}")
+    LOGGER.info(f"Time taken to write the data: {write_time_usage}")
 
     return records_synced
 

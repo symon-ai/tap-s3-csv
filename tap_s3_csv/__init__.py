@@ -64,8 +64,12 @@ def do_sync(config, catalog, state):
         singer.write_schema(stream_name, stream['schema'], key_properties)
 
         LOGGER.info("%s: Starting sync", stream_name)
+        sync_stream_start = time.time()
         counter_value = sync_stream(
             config, state, table_spec, stream, start_byte, end_byte, range_size, json_lib)
+        sync_stream_end = time.time()
+        LOGGER.info("%s: Sync duration: %s seconds",
+                    stream_name, sync_stream_end - sync_stream_start)
         LOGGER.info("%s: Completed sync (%s rows)", stream_name, counter_value)
 
     # import performance logging - left here for convenience
