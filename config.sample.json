@@ -1,12 +1,23 @@
 {
-  "bucket": "wisepipe-data-testing",
+  "account_id": "463885718325",
+  "bucket": "symon-import-tests",
+  "role_name": "symon-connection-role-symon-import-tests",
+  "external_id": "symon-id-21b37980-b0bb-4f89-9b82-c63b421c81a3",
   "tables": [
     {
-      "search_prefix": "exports/cars/",
-      "search_pattern": "part-.*\\.csv",
-      "table_name": "cars export!",
+      "search_prefix": "jasper",
+      "search_pattern": "only_headers_1\\.csv",
+      "table_name": "only_headers_1.csv",
       "delimiter": ",",
-      "escape_char": "\\"
+      "recursive_search": false,
+      "has_header": true
     }
-  ]
+  ],
+  "json_lib": "orjson",
+  "error_file_path": "./extract/21b37980-b0bb-4f89-9b82-c63b421c81a3/17Q5o7RQ9ufJ/4U0yBW79v9snPrJHPlVEy/tapError.json",
+  "error_start_marker": "[tap_error_start]",
+  "error_end_marker": "[tap_error_end]",
+  "start_byte": 0,
+  "end_byte": 58,
+  "range_size": 5242880
 }
