@@ -117,6 +117,9 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
             # so we need to pass in fieldnames. First thread needs to handle first row if table_spec.has_header == True in order to avoid
             # having first row parsed as record when it's actually header. Set handle_first_row param for PreprocessStream to True
             # for this case so that the file/stream pointer is moved to skip first row.
+
+            # with import file copy for sftp, catalog is different from csv one, column_order is not present
+
             file_handle = preprocess.PreprocessStream(
                 file_handle, table_spec, start_byte == 0 and table_spec.get('has_header', True))
             fieldnames = stream['column_order']
@@ -127,7 +130,8 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
                 # having header row parsed as first record
                 file_handle = preprocess.PreprocessStream(
                     file_handle, table_spec, table_spec.get('has_header', True))
-                fieldnames = stream['column_order']
+                #fieldnames = stream['column_order'] # change introduced by https://github.com/symon-ai/tap-s3-csv/pull/49
+                fieldnames = list(stream['schema']['properties'].keys())
             else:
                 # If column_order isn't present, that means we didn't do discovery with this tap - this occurs during TQP imports
                 # Pass parameters to PreprocessStream to guarantee header property is set, so we can use it in place of 'column_order'
@@ -268,11 +272,13 @@ def sync_csv_file(config, file_handle, s3_path, table_spec, stream, json_lib='si
                 records_buffer.append(to_write)
 
                 if len(records_buffer) >= BUFFER_SIZE:
-                    messages.write_records(table_name, records_buffer, json_lib)
+                    messages.write_records(
+                        table_name, records_buffer, json_lib)
                     records_synced += len(records_buffer)
                     records_buffer.clear()
         except UnicodeError:
-            raise SymonException("Sorry, we can't decode your file. Please try using UTF-8 or UTF-16 encoding for your file.", 'UnsupportedEncoding')
+            raise SymonException(
+                "Sorry, we can't decode your file. Please try using UTF-8 or UTF-16 encoding for your file.", 'UnsupportedEncoding')
     else:
         LOGGER.warning('Skipping "%s" file as it is empty', s3_path)
         s3.skipped_files_count = s3.skipped_files_count + 1
