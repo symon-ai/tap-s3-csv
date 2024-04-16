@@ -122,7 +122,8 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
 
             file_handle = preprocess.PreprocessStream(
                 file_handle, table_spec, start_byte == 0 and table_spec.get('has_header', True))
-            fieldnames = stream['column_order']
+            #fieldnames = stream['column_order'] # change introduced by https://github.com/symon-ai/tap-s3-csv/pull/49
+            fieldnames = list(stream['schema']['properties'].keys())
         else:
             file_handle = s3.get_file_handle(config, s3_path)
             if 'column_order' in stream:
