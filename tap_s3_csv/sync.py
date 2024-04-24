@@ -104,6 +104,9 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
 
     if extension in ["csv", "txt"]:
         fieldnames = None
+
+        cols_from_metadata = get_cols_from_metadata(stream)
+
         if file_handler:
             # If file is extracted from zip or gz use file object else get file object from s3 bucket
             file_handle = file_handler
@@ -119,20 +122,51 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
             # for this case so that the file/stream pointer is moved to skip first row.
 
             # with import file copy for sftp, catalog is different from csv one, column_order is not present
-
             file_handle = preprocess.PreprocessStream(
                 file_handle, table_spec, start_byte == 0 and table_spec.get('has_header', True))
-            #fieldnames = stream['column_order'] # change introduced by https://github.com/symon-ai/tap-s3-csv/pull/49
-            fieldnames = list(stream['schema']['properties'].keys())
+
+            fieldnames = cols_from_metadata
+
+            # sftp -> column_order : backward compatility
+            # make changes to tap sftp discovery to add column_order so that we dont have to detect header row
+            # if (stream.get('column_order')):
+            #     LOGGER.info('column_order present in stream')
+            #     fieldnames = stream['column_order']
+            #     file_handle = preprocess.PreprocessStream(
+            #         file_handle, table_spec, start_byte == 0 and table_spec.get('has_header', True))
+
+            # else:
+            #     LOGGER.info('column_order not present in stream')
+            #     # if column_order isn't present, it might mean refresh for very old discovery of csv or refresh of discovery of sftp file and using import file copy
+            #     # detect header row and use it as fieldnames
+            #     # how to get auto generated headers for first part of file
+            #     file_handle = preprocess.PreprocessStream(
+            #         file_handle, table_spec, start_byte == 0)
+            #     if (start_byte == 0):
+            #         fieldnames = file_handle.header
+            #         LOGGER.info(
+            #             'first part of file: using file_handle.header as fieldnames')
+
+            #         # OR fieldnames = file_handler._handle_first_row()
+            #     else:  # this is non first part of file in parallel import, have to detect header row
+            #         # fieldnames = list(stream['schema']['properties'].keys())
+            #         LOGGER.info(
+            #             'NOT first part of file: getting header row from first part of file')
+            #         file_handle_for_header = s3.get_csv_file(
+            #             config['bucket'], s3_path, 0, end_byte-start_byte, range_size)  # check if end_byte is larger than file size
+            #         file_handle_for_header = preprocess.PreprocessStream(
+            #             file_handle_for_header, table_spec, True)
+            #         fieldnames = file_handle_for_header.header
+            LOGGER.info(f'fieldnames: {fieldnames}')
+
         else:
             file_handle = s3.get_file_handle(config, s3_path)
-            if 'column_order' in stream:
+            if len(cols_from_metadata) > 0:
                 # same as above but for single thread. Set handle_first_row param to True if table_spec.has_header == True to avoid
                 # having header row parsed as first record
                 file_handle = preprocess.PreprocessStream(
                     file_handle, table_spec, table_spec.get('has_header', True))
-                #fieldnames = stream['column_order'] # change introduced by https://github.com/symon-ai/tap-s3-csv/pull/49
-                fieldnames = list(stream['schema']['properties'].keys())
+                fieldnames = cols_from_metadata
             else:
                 # If column_order isn't present, that means we didn't do discovery with this tap - this occurs during TQP imports
                 # Pass parameters to PreprocessStream to guarantee header property is set, so we can use it in place of 'column_order'
@@ -165,6 +199,22 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
         '"%s" having the ".%s" extension will not be synced.', s3_path, extension)
     s3.skipped_files_count = s3.skipped_files_count + 1
     return 0
+
+
+def get_cols_from_metadata(stream):
+    try:
+        mdata = metadata.to_map(stream['metadata'])
+        # Get keys of mdata that are tuples, filter out empty key, and get list of second elements from tuples
+        cols_from_mdata = [key[1]
+                           for key in mdata.keys() if key and len(key) > 1]
+    except Exception as e:
+        LOGGER.warning(
+            f'Error while getting cols from metadata for {stream["tap_stream_id"]}: {e}')
+        cols_from_mdata = []
+
+    LOGGER.info(
+        f'Cols elements in keys of mdata for {stream["tap_stream_id"]}: {cols_from_mdata}')
+    return cols_from_mdata
 
 
 def sync_gz_file(config, s3_path, table_spec, stream, file_handler):
