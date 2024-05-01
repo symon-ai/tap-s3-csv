@@ -121,42 +121,12 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
             # having first row parsed as record when it's actually header. Set handle_first_row param for PreprocessStream to True
             # for this case so that the file/stream pointer is moved to skip first row.
 
-            # with import file copy for sftp, catalog is different from csv one, column_order is not present
+            # with import file copy for sftp, catalog is different from csv one, column_order is not present, so using cols_from_metadata
             file_handle = preprocess.PreprocessStream(
                 file_handle, table_spec, start_byte == 0 and table_spec.get('has_header', True))
 
             fieldnames = cols_from_metadata
 
-            # sftp -> column_order : backward compatility
-            # make changes to tap sftp discovery to add column_order so that we dont have to detect header row
-            # if (stream.get('column_order')):
-            #     LOGGER.info('column_order present in stream')
-            #     fieldnames = stream['column_order']
-            #     file_handle = preprocess.PreprocessStream(
-            #         file_handle, table_spec, start_byte == 0 and table_spec.get('has_header', True))
-
-            # else:
-            #     LOGGER.info('column_order not present in stream')
-            #     # if column_order isn't present, it might mean refresh for very old discovery of csv or refresh of discovery of sftp file and using import file copy
-            #     # detect header row and use it as fieldnames
-            #     # how to get auto generated headers for first part of file
-            #     file_handle = preprocess.PreprocessStream(
-            #         file_handle, table_spec, start_byte == 0)
-            #     if (start_byte == 0):
-            #         fieldnames = file_handle.header
-            #         LOGGER.info(
-            #             'first part of file: using file_handle.header as fieldnames')
-
-            #         # OR fieldnames = file_handler._handle_first_row()
-            #     else:  # this is non first part of file in parallel import, have to detect header row
-            #         # fieldnames = list(stream['schema']['properties'].keys())
-            #         LOGGER.info(
-            #             'NOT first part of file: getting header row from first part of file')
-            #         file_handle_for_header = s3.get_csv_file(
-            #             config['bucket'], s3_path, 0, end_byte-start_byte, range_size)  # check if end_byte is larger than file size
-            #         file_handle_for_header = preprocess.PreprocessStream(
-            #             file_handle_for_header, table_spec, True)
-            #         fieldnames = file_handle_for_header.header
             LOGGER.info(f'fieldnames: {fieldnames}')
 
         else:
@@ -168,8 +138,8 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
                     file_handle, table_spec, table_spec.get('has_header', True))
                 fieldnames = cols_from_metadata
             else:
-                # If column_order isn't present, that means we didn't do discovery with this tap - this occurs during TQP imports
-                # Pass parameters to PreprocessStream to guarantee header property is set, so we can use it in place of 'column_order'
+                # If cols_from_metadata isn't present, that means we didn't do discovery with this tap - this occurs during TQP imports
+                # Pass parameters to PreprocessStream to guarantee header property is set, so we can use it in place of 'cols_from_metadata'
                 file_handle = preprocess.PreprocessStream(
                     file_handle, table_spec, True, s3_path, config)
                 fieldnames = file_handle.header
