@@ -177,14 +177,13 @@ def get_cols_from_metadata(stream):
         # Get keys of mdata that are tuples, filter out empty key, and get list of second elements from tuples
         cols_from_mdata = [key[1]
                            for key in mdata.keys() if key and len(key) > 1]
+        LOGGER.debug(
+            f'Cols elements in keys of mdata for {stream["tap_stream_id"]}: {cols_from_mdata}')
+        return cols_from_mdata
     except Exception as e:
-        LOGGER.warning(
+        LOGGER.error(
             f'Error while getting cols from metadata for {stream["tap_stream_id"]}: {e}')
-        cols_from_mdata = []
-
-    LOGGER.info(
-        f'Cols elements in keys of mdata for {stream["tap_stream_id"]}: {cols_from_mdata}')
-    return cols_from_mdata
+        raise e
 
 
 def sync_gz_file(config, s3_path, table_spec, stream, file_handler):
