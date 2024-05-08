@@ -112,6 +112,9 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
             file_handle = file_handler
         # support parallel import for both csv, txt files.
         elif start_byte is not None and end_byte is not None:
+            if len(cols_from_metadata) == 0:
+                raise Exception("Failed to get cols from metadata")
+
             file_handle = s3.get_csv_file(
                 config['bucket'], s3_path, start_byte, end_byte, range_size)
             LOGGER.info('using S3 Get Range method for csv import')
@@ -126,8 +129,6 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
                 file_handle, table_spec, start_byte == 0 and table_spec.get('has_header', True))
 
             fieldnames = cols_from_metadata
-
-            LOGGER.info(f'fieldnames: {fieldnames}')
 
         else:
             file_handle = s3.get_file_handle(config, s3_path)
@@ -177,13 +178,14 @@ def get_cols_from_metadata(stream):
         # Get keys of mdata that are tuples, filter out empty key, and get list of second elements from tuples
         cols_from_mdata = [key[1]
                            for key in mdata.keys() if key and len(key) > 1]
-        LOGGER.debug(
-            f'Cols elements in keys of mdata for {stream["tap_stream_id"]}: {cols_from_mdata}')
-        return cols_from_mdata
     except Exception as e:
-        LOGGER.error(
+        LOGGER.warning(
             f'Error while getting cols from metadata for {stream["tap_stream_id"]}: {e}')
-        raise e
+        cols_from_mdata = []
+
+    LOGGER.info(
+        f'Cols elements in keys of mdata for {stream["tap_stream_id"]}: {cols_from_mdata}')
+    return cols_from_mdata
 
 
 def sync_gz_file(config, s3_path, table_spec, stream, file_handler):
