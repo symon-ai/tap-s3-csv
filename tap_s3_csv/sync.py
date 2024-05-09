@@ -135,7 +135,7 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
 
         else:
             file_handle = s3.get_file_handle(config, s3_path)
-            if len(col_order) > 0:
+            if col_order is not None and len(col_order) > 0:
                 # same as above but for single thread. Set handle_first_row param to True if table_spec.has_header == True to avoid
                 # having header row parsed as first record
                 file_handle = preprocess.PreprocessStream(
