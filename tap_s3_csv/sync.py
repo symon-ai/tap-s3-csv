@@ -107,14 +107,14 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
 
         col_order = stream.get('column_order', None)
 
-        if (col_order is None):
-            col_order = get_cols_from_metadata(stream)
-
         if file_handler:
             # If file is extracted from zip or gz use file object else get file object from s3 bucket
             file_handle = file_handler
         # support parallel import for both csv, txt files.
         elif start_byte is not None and end_byte is not None:
+            if (col_order is None):
+                col_order = get_cols_from_metadata(stream)
+
             if len(col_order) == 0:
                 raise Exception("Failed to get cols order")
 
