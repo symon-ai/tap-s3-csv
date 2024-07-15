@@ -32,7 +32,15 @@ def infer_column(column, dateFormatMap, lengths):
 
 def infer_number(column):
     tmpCol = column.copy()
-    tmpResult = pd.to_numeric(tmpCol, errors='ignore')
+    tmpCol = tmpCol.apply(lambda x: x.replace(',', ''))
+    # empty strings are converted to NaN, which is a valid number
+    # but if entire column is NaN, we want it to be inferred as string
+    try:
+        tmpResult = pd.to_numeric(tmpCol)
+        if tmpResult.dropna().empty:
+            return False
+    except Exception:
+        return False
 
     if tmpResult.dtype.name in ['float64', 'int64']:
         return True
