@@ -51,6 +51,10 @@ def infer_datetime(column, dateFormatMap):
     tmpCol = column.copy()
     # SalesForce exports empty dates as <NULL>
     tmpCol.replace('(?i)<null>', '', inplace=True, regex=True)
+    # if entire column is empty string, we want it to be inferred as string
+    tmpCol = tmpCol.replace('', np.nan).dropna()
+    if tmpCol.empty:
+        return False
     # pandas does not check the format properly
     return infer_datetime_and_format(tmpCol, dateFormatMap)
 
