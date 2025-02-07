@@ -3,12 +3,14 @@ import random
 import csv
 import cchardet as chardet
 import clevercsv
+import singer
 
 from tap_s3_csv import s3, preprocess
 
 # We started using tap_s3_csv in 3.4 for both s3 and csv imports. Dialect detection
 # is only run for csv imports
 
+LOGGER = singer.get_logger()
 
 def detect_tables_dialect(config):
     # there is only one table in the array
@@ -68,7 +70,7 @@ def detect_dialect(config, s3_file, table):
 
     file_key = s3_file.get('key')
     file_handle = s3.get_file_handle(config, file_key)
-    print("HIII FILE KEY"+ file_key)
+    LOGGER.info("HIII FILE KEY"+ str(file_key))
     # iterator that handles skip/ignore rows, need it for detecting delimiter, quotechars correctly
     preprocess_file_handle = preprocess.PreprocessStream(file_handle, table, False)
     file_iter = preprocess_file_handle.iter_lines()
@@ -165,7 +167,7 @@ def detect_dialect(config, s3_file, table):
 
             if i == MAX_DIALECT_LINES:
                 break
-        print("HIIII"+decoded)
+        LOGGER.info("HIIII"+",".join(str(x) for x in decoded))
         if len(decoded) > 0:
             try:
                 # clevercsv is a drop-in replacement for python's csv module. The default csv module does a weak
