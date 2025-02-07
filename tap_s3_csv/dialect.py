@@ -68,6 +68,7 @@ def detect_dialect(config, s3_file, table):
 
     file_key = s3_file.get('key')
     file_handle = s3.get_file_handle(config, file_key)
+    print("HIII FILE KEY"+ file_key)
     # iterator that handles skip/ignore rows, need it for detecting delimiter, quotechars correctly
     preprocess_file_handle = preprocess.PreprocessStream(file_handle, table, False)
     file_iter = preprocess_file_handle.iter_lines()
@@ -164,7 +165,7 @@ def detect_dialect(config, s3_file, table):
 
             if i == MAX_DIALECT_LINES:
                 break
-
+        print("HIIII"+decoded)
         if len(decoded) > 0:
             try:
                 # clevercsv is a drop-in replacement for python's csv module. The default csv module does a weak
