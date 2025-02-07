@@ -175,6 +175,7 @@ def detect_dialect(config, s3_file, table):
                 sample = '\n'.join(decoded)
                 dialect = clevercsv.Sniffer().sniff(
                     sample, [',', ';', '|', '^', '\t', ' '])
+                LOGGER.info("HIIII DIALECT" + dialect)
                 delimiter = dialect.delimiter
 
                 # we're currently only using clevercsv for dialect detection, csv can only handle 1 character
