@@ -1,3 +1,4 @@
+import re
 import sys
 import csv
 import io
@@ -45,6 +46,7 @@ def sync_stream(config, state, table_spec, stream, start_byte, end_byte, range_s
     # we can sort in memory which is suboptimal. If we could bookmark
     # based on anything else then we could just sync files as we see them.
     for s3_file in sorted(s3_files, key=lambda item: item['key']):
+        LOGGER.info('syncing for file %s', s3_file['key'])
         records_streamed += sync_table_file(
             config, s3_file['key'], table_spec, stream, start_byte, end_byte, range_size, json_lib)
 
@@ -64,8 +66,10 @@ def sync_stream(config, state, table_spec, stream, start_byte, end_byte, range_s
 
 def sync_table_file(config, s3_path, table_spec, stream, byte_start, byte_end, range_size, json_lib='simple'):
     extension = s3_path.split(".")[-1].lower()
+    LOGGER.info('extension: %s', extension)
 
     # Check whether file is without extension or not
+    # added .csv_part* case to support tqp multi part file import
     if not extension or s3_path.lower() == extension:
         LOGGER.warning('"%s" without extension will not be synced.', s3_path)
         s3.skipped_files_count = s3.skipped_files_count + 1
@@ -73,7 +77,7 @@ def sync_table_file(config, s3_path, table_spec, stream, byte_start, byte_end, r
     try:
         if extension == "zip":
             return sync_compressed_file(config, s3_path, table_spec, stream, byte_start, byte_end, range_size)
-        if extension in ["csv", "gz", "jsonl", "txt"]:
+        if extension in ["csv", "gz", "jsonl", "txt"] or re.match(r'csv_part\d+', extension):
             return handle_file(config, s3_path, table_spec, stream, extension, None, byte_start, byte_end, range_size, json_lib)
         LOGGER.warning(
             '"%s" having the ".%s" extension will not be synced.', s3_path, extension)
@@ -102,7 +106,7 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
     if extension == "gz":
         return sync_gz_file(config, s3_path, table_spec, stream, file_handler)
 
-    if extension in ["csv", "txt"]:
+    if extension in ["csv", "txt"] or re.search(r'\.csv_part\d*$', s3_path):
         fieldnames = None
 
         col_order = stream.get('column_order', None)
@@ -135,11 +139,20 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
 
         else:
             file_handle = s3.get_file_handle(config, s3_path)
+            LOGGER.info(
+                f'col_order is present: {col_order is not None and len(col_order) > 0}')
             if col_order is not None and len(col_order) > 0:
-                # same as above but for single thread. Set handle_first_row param to True if table_spec.has_header == True to avoid
-                # having header row parsed as first record
-                file_handle = preprocess.PreprocessStream(
-                    file_handle, table_spec, table_spec.get('has_header', True))
+                # if filename is multipart file and part 2 or more, then has_header should be False as TQP part file export does not have header
+                if re.search(r'\.csv_part\d*$', s3_path):
+                    LOGGER.info(
+                        f'Using column order from stream metadata for {s3_path}')
+                    file_handle = preprocess.PreprocessStream(
+                        file_handle, table_spec, False)
+                else:
+                    # same as above but for single thread. Set handle_first_row param to True if table_spec.has_header == True to avoid
+                    # having header row parsed as first record
+                    file_handle = preprocess.PreprocessStream(
+                        file_handle, table_spec, table_spec.get('has_header', True))
                 fieldnames = col_order
             else:
                 # If col_order isn't present, that means we didn't do discovery with this tap - this occurs during TQP imports
@@ -147,6 +160,8 @@ def handle_file(config, s3_path, table_spec, stream, extension, file_handler=Non
                 file_handle = preprocess.PreprocessStream(
                     file_handle, table_spec, True, s3_path, config)
                 fieldnames = file_handle.header
+                # write fieldnames to column order so that if multi part file type, subsequent parts can use it
+                stream['column_order'] = fieldnames
 
         return sync_csv_file(config, file_handle, s3_path, table_spec, stream, json_lib, fieldnames)
 
