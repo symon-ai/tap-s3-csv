@@ -1,6 +1,8 @@
 import re
 import random
 import csv
+
+import singer
 import cchardet as chardet
 import clevercsv
 from clevercsv.dialect import SimpleDialect
@@ -10,6 +12,7 @@ from tap_s3_csv import s3, preprocess
 # We started using tap_s3_csv in 3.4 for both s3 and csv imports. Dialect detection
 # is only run for csv imports
 
+LOGGER = singer.get_logger()
 
 def detect_tables_dialect(config):
     # there is only one table in the array
@@ -132,14 +135,17 @@ def detect_dialect(config, s3_file, table):
         encoding = detector_results.get('encoding', 'utf-8')
         confidence = detector_results.get('confidence', 1.0)
 
+        LOGGER.info(f"Detector results from chardet: {detector_results or 'No results'} for s3file: {file_key}")
+
         # 1. cchardet confidence can sometimes have a value of None (WP-12916 not sure exact cause)
         # 2. ignore detector if confidence was low
         # 3. just in case if encoding is None, we default to utf-8
         # 4. utf-8 is backwards compatible with ascii and supports more characters
-        if confidence is None or confidence < .70 or encoding is None or encoding == 'ascii':
+        if confidence is None or confidence < .70 or encoding is None or encoding.lower() == 'ascii':
             encoding = 'utf-8'
 
         table['encoding'] = encoding
+        LOGGER.info(f"Decided encoding: {encoding} for s3file: {file_key}")
 
     # detect csv dialect
     if detect_delimiter or detect_quotechar:
@@ -205,3 +211,5 @@ def detect_dialect(config, s3_file, table):
             table['delimiter'] = delimiter
         if detect_quotechar:
             table['quotechar'] = quotechar
+
+        LOGGER.info(f"Detected delimiter: {delimiter} and quotechar: {quotechar} for s3file: {file_key}")
