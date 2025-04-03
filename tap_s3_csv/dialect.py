@@ -35,12 +35,14 @@ def detect_dialect(config, s3_file, table):
     detect_quotechar = config_quotechar == ''
     detect_encoding = config_encoding == ''
 
+    if not detect_encoding:
+        LOGGER.info(f"Encoding provided as {config_encoding} for s3file: {s3_file.get('key')}")
     if not detect_encoding and not detect_delimiter and not detect_quotechar:
         return
 
     # clevercsv is good but slow - we cap it at 2000 rows, which is 1s of runtime on my machine
     MAX_DIALECT_LINES = 2000
-    MAX_ENCODING_LINES = 10000
+    MAX_ENCODING_LINES = 30000
     MAX_LINES = MAX_ENCODING_LINES if detect_encoding else MAX_DIALECT_LINES
 
     # max bytes we want to cache in memory
@@ -62,7 +64,7 @@ def detect_dialect(config, s3_file, table):
     # looking at the first few lines, it's especially offensive. People might be more understanding of a failed
     # detection if the key line is buried deep in the file.
     DETECT_CHARDET_LINE = re.compile(b'([\x80-\xFF]|(\033|~{))')
-    MAX_CHARDET_LINES = 100
+    MAX_CHARDET_LINES = 400
     FIRST_CHARDET_LINES = MAX_CHARDET_LINES / 10
     interesting = []
     interesting_map = {}
@@ -159,7 +161,7 @@ def detect_dialect(config, s3_file, table):
         chars = 0
         for i, line in enumerate(lines):
             # replace character with � when line cannot be decoded.
-            dline = line.decode(encoding, errors='replace')
+            dline = line.decode(table['encoding'], errors='replace')
 
             # clevercsv seems to explode in memory to multiples of sample size
             # limit sample to a reasonable amount of characters to avoid memory issue
