@@ -165,7 +165,8 @@ def get_records_for_csv(s3_path, sample_rate, iterator):
 
         LOGGER.info("Sampled %s rows from %s", sampled_row_count, s3_path)
     except UnicodeError:
-        raise SymonException("Sorry, we can't decode your file. Please try using UTF-8 or UTF-16 encoding for your file.", 'UnsupportedEncoding')
+        raise SymonException(
+            "Sorry, we can't decode your file. Please try using UTF-8 or UTF-16 encoding for your file.", 'UnsupportedEncoding')
 
 
 def get_records_for_jsonl(s3_path, sample_rate, iterator):
@@ -267,12 +268,14 @@ def sample_file(table_spec, s3_path, file_handle, sample_rate, extension, config
         return []
     if extension in ["csv", "txt"]:
         # file_hanedle: If file object read from s3 bucket file else use extracted file object from zip or gz
-        # preprocess: For discovery, we need to set handle_first_row param to True so that we can set column headers 
+        # preprocess: For discovery, we need to set handle_first_row param to True so that we can set column headers
         # correctly. Need to pass in s3_path and config for resetting the file handle so that we don't lose first row
         # after parsing it to generate headers if table_spec.has_header == False
-        preprocess_file_handle = preprocess.PreprocessStream(file_handle, table_spec, True, s3_path, config)
+        preprocess_file_handle = preprocess.PreprocessStream(
+            file_handle, table_spec, True, s3_path, config)
         fieldnames = preprocess_file_handle.header
-        iterator = csv_iterator.get_row_iterator(preprocess_file_handle, table_spec, fieldnames)
+        iterator = csv_iterator.get_row_iterator(
+            preprocess_file_handle, table_spec, fieldnames)
         csv_records = []
         if iterator:
             csv_records = get_records_for_csv(s3_path, sample_rate, iterator)
@@ -415,6 +418,8 @@ def get_input_files_for_table(config, table_spec, modified_since=None):
 
     # For Symon imports to restrict to import only one file
     pattern = f"^{table_spec['search_pattern']}$"
+    LOGGER.info('Trying to match pattern "%s" for table "%s"', pattern,
+                table_spec['table_name'])
     try:
         matcher = re.compile(pattern)
     except re.error as e:
@@ -439,7 +444,9 @@ def get_input_files_for_table(config, table_spec, modified_since=None):
             skipped_files_count = skipped_files_count + 1
             continue
 
+        LOGGER.info(f'matching {os.path.basename(key)}')
         if matcher.search(os.path.basename(key)):
+            LOGGER.info('Found matching file "%s"', key)
             matched_files_count += 1
             if modified_since is None or modified_since < last_modified:
                 LOGGER.info('Will download key "%s" as it was last modified %s',
@@ -447,6 +454,7 @@ def get_input_files_for_table(config, table_spec, modified_since=None):
                             last_modified)
                 yield {'key': key, 'last_modified': last_modified}
         else:
+            LOGGER.info('Skipping unmatched file "%s"', key)
             unmatched_files_count += 1
 
         if (unmatched_files_count + matched_files_count) % max_files_before_log == 0:
@@ -462,7 +470,7 @@ def get_input_files_for_table(config, table_spec, modified_since=None):
 
     if matched_files_count == 0:
         if skipped_files_count > 0 and unmatched_files_count == 0:
-            # Symon imports only one file at a time where only one file is uploaded in s3 bucket/prefix location. 
+            # Symon imports only one file at a time where only one file is uploaded in s3 bucket/prefix location.
             # If skipped_files_count > 0, it must mean that the file has been skipped due to being empty file.
             raise SymonException('File is empty.', 'EmptyFile')
         raise Exception("No files found matching pattern {}".format(pattern))
@@ -570,7 +578,7 @@ class GetFileRangeStream:
 
         # handle partial line at chunk end
         if pending:
-            #LOGGER.info(f'pending: {pending}')
+            # LOGGER.info(f'pending: {pending}')
             # if its EOF, return existing pending
             if (end == file_size - 1):
                 if count_skipped_rows_at_start == 0:
@@ -595,10 +603,10 @@ class GetFileRangeStream:
             elif (b'\n' in pending or b'\r' in pending):
                 overflow_rows_allowed = 2
 
-            #LOGGER.info(f'overflow_rows_allowed: {overflow_rows_allowed}')
+            # LOGGER.info(f'overflow_rows_allowed: {overflow_rows_allowed}')
             overflow_row_count = 0
             for chunk in iter_chunks:
-                #LOGGER.info('chunk for pending', chunk)
+                # LOGGER.info('chunk for pending', chunk)
                 lines = (pending + chunk).splitlines(True)
                 for line in lines[:-1]:
                     if overflow_row_count >= overflow_rows_allowed:
@@ -615,7 +623,7 @@ class GetFileRangeStream:
             if overflow_row_count >= overflow_rows_allowed or count_skipped_rows_at_start == 0:
                 return
             if pending:
-                #LOGGER.info(f'still pending: {pending}')
+                # LOGGER.info(f'still pending: {pending}')
                 yield pending.splitlines(False)[0]
                 return
 
@@ -630,17 +638,17 @@ class GetFileRangeStream:
         while start_range < iter_end_byte:
             count_s3_calls += 1
             request_range = f'bytes={start_range}-{end_range}'
-            #LOGGER.info(f'request range: {request_range}')
+            # LOGGER.info(f'request range: {request_range}')
             response = s3_object.get(
                 Range=request_range
             )
             for chunk in response['Body']:
-                #LOGGER.info(f'chunk: {chunk}')
+                # LOGGER.info(f'chunk: {chunk}')
                 yield chunk
             start_range = end_range + 1
             end_range = min(start_range+self.chunk_size, iter_end_byte)
 
-        #LOGGER.info(f'total no of S3 calls: {count_s3_calls}')
+        # LOGGER.info(f'total no of S3 calls: {count_s3_calls}')
 
     @retry_pattern()
     def __get_first_row__(self):
@@ -652,7 +660,7 @@ class GetFileRangeStream:
         for chunk in iter_chunks:
             if header_row == b'':
                 lines = (pending + chunk).splitlines(True)
-                
+
                 # for chunk with only headers(empty rows), the lines size is 1 and lines[:-1] will always be skipped
                 # need to handle this seperately
                 if len(lines) == 1:
