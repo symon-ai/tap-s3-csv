@@ -473,7 +473,7 @@ def get_input_files_for_table(config, table_spec, modified_since=None):
             # Symon imports only one file at a time where only one file is uploaded in s3 bucket/prefix location.
             # If skipped_files_count > 0, it must mean that the file has been skipped due to being empty file.
             raise SymonException('File is empty.', 'EmptyFile')
-        LOGGER.warn("No files found matching pattern {}".format(pattern))
+        LOGGER.warning("No files found matching pattern {}".format(pattern))
         key = table_spec['table_name']
         if len(table_spec.get('search_prefix', '')) > 0:
             key = table_spec['search_prefix'] + '/' + key
