@@ -473,7 +473,11 @@ def get_input_files_for_table(config, table_spec, modified_since=None):
             # Symon imports only one file at a time where only one file is uploaded in s3 bucket/prefix location.
             # If skipped_files_count > 0, it must mean that the file has been skipped due to being empty file.
             raise SymonException('File is empty.', 'EmptyFile')
-        raise Exception("No files found matching pattern {}".format(pattern))
+        LOGGER.warn("No files found matching pattern {}".format(pattern))
+        key = table_spec['table_name']
+        if len(table_spec.get('search_prefix', '')) > 0:
+            key = table_spec['search_prefix'] + '/' + key
+        raise SymonException(f"Sorry, we couldn't find any files matching the key {key} in bucket {bucket}", "amazonS3.FileNotFound")
 
 
 @retry_pattern()
