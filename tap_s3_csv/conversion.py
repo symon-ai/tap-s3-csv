@@ -74,6 +74,7 @@ def infer_datetime_and_format(column, dateFormatMap):
     except Exception as e:
         if 'Out of bounds' in str(e):
             LOGGER.info("Date value out of bounds for pandas Timestamp: %s", e)
+            dateFormatMap[column.name] = 'YYYY/MM/DD' if '/' in cell else 'YYYY-MM-DD'
             return True
 
         LOGGER.info("Failed to parse date-time with format 'YYYY-MM-DD': %s", e)
