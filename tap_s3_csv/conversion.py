@@ -32,7 +32,8 @@ def infer_column(column, dateFormatMap, lengths):
 
 def infer_number(column):
     tmpCol = column.copy()
-    tmpCol = tmpCol.apply(lambda x: x.replace(',', ''))
+    # Handle None/NaN values before trying to call string methods
+    tmpCol = tmpCol.apply(lambda x: x.replace(',', '') if x is not None and isinstance(x, str) else x)
     # empty strings are converted to NaN, which is a valid number
     # but if entire column is NaN, we want it to be inferred as string
     try:
