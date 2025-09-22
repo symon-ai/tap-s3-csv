@@ -77,28 +77,28 @@ def infer_datetime_and_format(column, dateFormatMap):
     try:
         column = pd.to_datetime(column, format='%m-%d-%Y')
         dateFormatMap[column.name] = 'MM-DD-YYYY'
-        return False
+        return True
     except Exception as e:
         pass
 
     try:
         column = pd.to_datetime(column, format='%d-%m-%Y')
         dateFormatMap[column.name] = 'DD-MM-YYYY'
-        return False
+        return True
     except Exception as e:
         pass
 
     try:
         column = pd.to_datetime(column, format='%m/%d/%Y')
         dateFormatMap[column.name] = 'MM/DD/YYYY'
-        return False
+        return True
     except Exception as e:
         pass
 
     try:
         column = pd.to_datetime(column, format='%d/%m/%Y')
         dateFormatMap[column.name] = 'DD/MM/YYYY'
-        return False
+        return True
     except Exception as e:
         pass
 
