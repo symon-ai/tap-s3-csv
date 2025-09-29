@@ -67,7 +67,7 @@ def infer_datetime_and_format(column, dateFormatMap):
         # e.g '2022-01-02', '2022/01/02', '2022-01-02T12:34:56' would all pass pd.to_datetime using formats '%Y-%m-%d',
         # '%Y/%m/%d', '%Y-%m-%dT%H:%M:%S' (or variations of iso-8601 formats including time + tz)
         # Choose one cell to check if '-' is in the value and update dateFormatMap correctly
-        cell = column.min()
+        cell = column.dropna().min()
         column = pd.to_datetime(column, format='%Y-%m-%d')
         if '-' in cell:
             # since iso-8601 format with time value could vary in length, just default to this format. target will parse using
