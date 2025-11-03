@@ -68,9 +68,6 @@ def infer_out_of_bounds_datetime(column, dateFormatMap):
             dateFormatMap[column.name] = 'YYYY-MM-DD'
     else:
         dateFormatMap[column.name] = 'YYYY/MM/DD'
-    
-    # LOGGER.info(f"Column: {column.name}")
-    # LOGGER.info(f"DateFormatMap: {dateFormatMap[column.name]}")
         
     return True
             
