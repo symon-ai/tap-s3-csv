@@ -62,10 +62,7 @@ def infer_datetime(column, dateFormatMap):
 def infer_out_of_bounds_datetime(column, dateFormatMap):
     cell = column.dropna().min()
     if '-' in cell:
-        if len(cell) > 10:
-            dateFormatMap[column.name] = 'YYYY-MM-DDTHH:MM:SS'
-        else:
-            dateFormatMap[column.name] = 'YYYY-MM-DD'
+        dateFormatMap[column.name] = 'YYYY-MM-DD'
     else:
         dateFormatMap[column.name] = 'YYYY/MM/DD'
         
