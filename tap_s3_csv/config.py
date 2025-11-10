@@ -14,6 +14,5 @@ CONFIG_CONTRACT = Schema([{
     Optional('skip_footer_row'): int,
     Optional('has_header'): bool,
     Optional('row_limit'): int,
-    Optional('encoding'): str,
-    Optional('preserve_out_of_bound_dates'): bool
+    Optional('encoding'): str
 }])
