@@ -9,12 +9,11 @@ import backoff
 import boto3
 import singer
 from enum import Enum
-
+from copy import deepcopy
 from botocore.credentials import (
     AssumeRoleCredentialFetcher,
     CredentialResolver,
-    DeferredRefreshableCredentials,
-    JSONFileCache
+    DeferredRefreshableCredentials
 )
 from botocore.exceptions import ClientError
 from botocore.session import Session
@@ -58,6 +57,36 @@ class AssumeRoleProvider():
             self.METHOD
         )
 
+class InMemoryCache:
+    """
+    In-memory cache for AWS credentials to avoid file system race conditions.
+    Implements the same interface as JSONFileCache but stores data in memory.
+    
+    This is a drop-in replacement for JSONFileCache that uses a dict instead
+    of the file system, avoiding race conditions in parallel processes.
+    """
+    def __init__(self):
+        self._cache = {}
+    
+    def __contains__(self, key):
+        return key in self._cache
+    
+    def __getitem__(self, key):
+        return deepcopy(self._cache[key])
+    
+    def __setitem__(self, key, value):
+        self._cache[key] = deepcopy(value)
+    
+    def __delitem__(self, key):
+        if key in self._cache:
+            del self._cache[key]
+        else:
+            raise KeyError(key)
+    
+    def get(self, key, default=None):
+        if key in self._cache:
+            return deepcopy(self._cache[key])
+        return default
 
 @retry_pattern()
 def setup_aws_client(config):
@@ -73,7 +102,7 @@ def setup_aws_client(config):
             'RoleSessionName': 'TapS3CSV',
             'ExternalId': config['external_id']
         },
-        cache=JSONFileCache()
+        cache=InMemoryCache()
     )
 
     refreshable_session = Session()
