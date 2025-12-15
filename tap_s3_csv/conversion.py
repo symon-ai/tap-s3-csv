@@ -57,8 +57,7 @@ def infer_datetime(column, dateFormatMap):
         return False
     # pandas does not check the format properly
     return infer_datetime_and_format(tmpCol, dateFormatMap)
-
-
+            
 def infer_datetime_and_format(column, dateFormatMap):
     column = column[column.astype(bool)] # Ignore empty strings/blank rows - they fail parsing for all but the first format
 
@@ -67,45 +66,64 @@ def infer_datetime_and_format(column, dateFormatMap):
         # e.g '2022-01-02' and '2022/01/02' would both pass pd.to_datetime using formats '%Y-%m-%d'
         # and '%Y/%m/%d'
         # Choose one cell to check if '/' is in the value and update dateFormatMap correctly
-        cell = column.min()
+        cell = column.dropna().min()
         column = pd.to_datetime(column, format='%Y-%m-%d')
         dateFormatMap[column.name] = 'YYYY/MM/DD' if '/' in cell else 'YYYY-MM-DD'
         return True
     except Exception as e:
+        # when the datetime is out of bounds, to_datetime would raise an exception with 'Out of bounds' in the message
+        # if the value is not a valid datetime, or the format is not supported, it would be different exception
+        # same for other format checks below
         if 'Out of bounds' in str(e):
-            LOGGER.info("Date value out of bounds for pandas Timestamp: %s", e)
             dateFormatMap[column.name] = 'YYYY/MM/DD' if '/' in cell else 'YYYY-MM-DD'
             return True
 
-        LOGGER.info("Failed to parse date-time with format 'YYYY-MM-DD': %s", e)
         pass
 
     try:
         column = pd.to_datetime(column, format='%m-%d-%Y')
         dateFormatMap[column.name] = 'MM-DD-YYYY'
-        return False
+        return True
     except Exception as e:
+        if 'Out of bounds' in str(e):
+            LOGGER.debug("Date value out of bounds for pandas Timestamp: %s", e)
+            dateFormatMap[column.name] = 'MM-DD-YYYY'
+            return True
+
         pass
 
     try:
         column = pd.to_datetime(column, format='%d-%m-%Y')
         dateFormatMap[column.name] = 'DD-MM-YYYY'
-        return False
+        return True
     except Exception as e:
+        if 'Out of bounds' in str(e):
+            LOGGER.debug("Date value out of bounds for pandas Timestamp: %s", e)
+            dateFormatMap[column.name] = 'DD-MM-YYYY'
+            return True
         pass
 
     try:
         column = pd.to_datetime(column, format='%m/%d/%Y')
         dateFormatMap[column.name] = 'MM/DD/YYYY'
-        return False
+        return True
     except Exception as e:
+        if 'Out of bounds' in str(e):
+            LOGGER.debug("Date value out of bounds for pandas Timestamp: %s", e)
+            dateFormatMap[column.name] = 'MM/DD/YYYY'
+            return True
         pass
 
     try:
         column = pd.to_datetime(column, format='%d/%m/%Y')
         dateFormatMap[column.name] = 'DD/MM/YYYY'
-        return False
+        return True
     except Exception as e:
+        if 'Out of bounds' in str(e):
+            LOGGER.debug("Date value out of bounds for pandas Timestamp: %s", e)
+            dateFormatMap[column.name] = 'DD/MM/YYYY'
+            return True
+
         pass
 
     return False

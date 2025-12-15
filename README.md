@@ -71,7 +71,8 @@ The `table` field consists of one or more objects that describe how to find file
         "date_overrides": "created_at",
         "delimiter": ",",
         "escape_char": "\",
-        "row_limit: 100
+        "row_limit: 100,
+        "encoding":"UTF-8"
     },
     ...
 ]
@@ -85,6 +86,7 @@ The `table` field consists of one or more objects that describe how to find file
 - **delimiter**: This allows you to specify a custom delimiter, such as `\t` or `|`, if that applies to your files.
 - **escape_char**: This allows you to specify a single escape character (default is `\`) if that applies to your files.
 - **row_limit**: This allows you limit the number of rows that gets processed.
+- **encoding**: This allows you to specify file encoding.
 
 A sample configuration is available inside [config.sample.json](config.sample.json)
 
