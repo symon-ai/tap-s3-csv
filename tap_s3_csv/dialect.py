@@ -8,6 +8,7 @@ import clevercsv
 from clevercsv.dialect import SimpleDialect
 
 from tap_s3_csv import s3, preprocess
+from tap_s3_csv.symon_exception import SymonException
 
 # We started using tap_s3_csv in 3.4 for both s3 and csv imports. Dialect detection
 # is only run for csv imports
@@ -84,7 +85,11 @@ def detect_dialect(config, s3_file, table):
             line_bytes = len(line)
 
             if line_bytes >= MAX_LINE_BYTES:
-                raise Exception('Too many bytes in one line')
+                max_size_mb = MAX_LINE_BYTES / (1024 ** 2)
+                raise SymonException(
+                    f'Row exceeds maximum allowed size of {max_size_mb:.0f}MB. Please reduce the size of individual rows in your file.',
+                    'RowSizeLimitExceeded'
+                )
 
             lines_read += 1
             if bytes_read + line_bytes <= MAX_LINES_BYTES:
