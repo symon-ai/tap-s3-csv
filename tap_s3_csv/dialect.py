@@ -3,7 +3,8 @@ import random
 import csv
 
 import singer
-import cchardet as chardet
+# switch to chardet since cchardet is deprecated and incompatible with python 3.13
+import chardet
 import clevercsv
 from clevercsv.dialect import SimpleDialect
 
