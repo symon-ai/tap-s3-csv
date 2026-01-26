@@ -20,21 +20,67 @@ VALID_DATETIME_FORMATS = [
     UNIX_MILLISECONDS_INTEGER_DATETIME_PARSING,
 ]
 
+# Pandas Timestamp boundaries - dates at or beyond these are sentinel values
+# that represent "min" or "max" dates from the original data
+PANDAS_MIN_DATE = datetime.date(1677, 9, 22)
+PANDAS_MAX_DATE = datetime.date(2262, 4, 10)
+
+# Safe boundary dates (compatible with ICM and other targets)
+SAFE_MIN_DATETIME = datetime.datetime(1900, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+SAFE_MAX_DATETIME = datetime.datetime(9998, 12, 31, 23, 59, 59, tzinfo=datetime.timezone.utc)
+
+
+def clamp_datetime_value(dt_value):
+    """
+    Clamp a datetime value if it's at pandas boundary dates.
+    
+    Returns the clamped datetime or the original if no clamping needed.
+    """
+    if dt_value is None:
+        return None
+    
+    # Extract date part for comparison
+    if isinstance(dt_value, datetime.datetime):
+        date_part = dt_value.date()
+    elif isinstance(dt_value, datetime.date):
+        date_part = dt_value
+    else:
+        return dt_value
+    
+    # Check for boundary dates and clamp
+    if date_part <= PANDAS_MIN_DATE:
+        LOGGER.debug(f'Clamping min boundary date {dt_value} to {SAFE_MIN_DATETIME}')
+        return SAFE_MIN_DATETIME
+    elif date_part >= PANDAS_MAX_DATE:
+        LOGGER.debug(f'Clamping max boundary date {dt_value} to {SAFE_MAX_DATETIME}')
+        return SAFE_MAX_DATETIME
+    
+    return dt_value
+
 
 def string_to_datetime(value):
     try:
-        return strftime(strptime_to_utc(value))
+        dt_value = strptime_to_utc(value)
+        # Clamp out-of-bound dates before converting to string
+        dt_value = clamp_datetime_value(dt_value)
+        return strftime(dt_value)
     except Exception as ex:
         LOGGER.warning('%s, (%s)', ex, value)
         return None
 
 
 def unix_milliseconds_to_datetime(value):
-    return strftime(datetime.datetime.fromtimestamp(float(value) / 1000.0, datetime.timezone.utc))
+    dt_value = datetime.datetime.fromtimestamp(float(value) / 1000.0, datetime.timezone.utc)
+    # Clamp out-of-bound dates
+    dt_value = clamp_datetime_value(dt_value)
+    return strftime(dt_value)
 
 
 def unix_seconds_to_datetime(value):
-    return strftime(datetime.datetime.fromtimestamp(int(value), datetime.timezone.utc))
+    dt_value = datetime.datetime.fromtimestamp(int(value), datetime.timezone.utc)
+    # Clamp out-of-bound dates
+    dt_value = clamp_datetime_value(dt_value)
+    return strftime(dt_value)
 
 
 def breadcrumb_path(breadcrumb):
