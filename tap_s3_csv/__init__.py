@@ -3,6 +3,8 @@ import sys
 import singer
 import time
 import traceback
+import datetime
+import boto3
 
 from singer import metadata
 from tap_s3_csv.discover import discover_streams
@@ -23,6 +25,32 @@ IMPORT_PERF_METRICS_LOG_PREFIX = "IMPORT_PERF_METRICS:"
 # for symon error logging
 ERROR_START_MARKER = '[tap_error_start]'
 ERROR_END_MARKER = '[tap_error_end]'
+
+
+def write_export_metrics(bucket, key, row_count, col_count):
+    """
+    Write export metrics JSON to S3 for later aggregation.
+    Non-breaking: wrapped in try/catch, logs errors but doesn't raise.
+    """
+    try:
+        s3_client = boto3.client('s3')
+        metrics = {
+            "metricType": "EXPORT",
+            "rowCount": row_count,
+            "colCount": col_count,
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+        }
+        s3_client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=json.dumps(metrics),
+            ContentType="application/json"
+        )
+        LOGGER.info(f"Wrote export metrics to s3://{bucket}/{key}")
+        return True
+    except Exception as e:
+        LOGGER.warning(f"Failed to write export metrics (non-breaking): {e}")
+        return False
 
 
 def do_discover(config):
@@ -97,6 +125,15 @@ def do_sync(config, catalog, state):
     json_row_col = {"name": name, "row": total_row_count, "col": total_col_count}
     grouped_logs.insert(0,"EXPORTS tap-s3-csv data_props: " + str(json_row_col))
     LOGGER.info("| ".join(grouped_logs))
+
+    # Write export metrics if path is provided (full path including filename)
+    export_metrics_s3_path = config.get('export_metrics_s3_path', None)
+    if export_metrics_s3_path:
+        metrics_bucket = export_metrics_s3_path.get('bucket')
+        metrics_key = export_metrics_s3_path.get('key')
+        if metrics_bucket and metrics_key:
+            write_export_metrics(metrics_bucket, metrics_key, total_row_count, current_col_count)
+
     LOGGER.info('Done syncing.')
 
 
