@@ -37,8 +37,7 @@ def write_export_metrics(bucket, key, row_count, col_count):
         metrics = {
             "metricType": "EXPORT",
             "rowCount": row_count,
-            "colCount": col_count,
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+            "colCount": col_count
         }
         s3_client.put_object(
             Bucket=bucket,
