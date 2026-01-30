@@ -3,7 +3,6 @@ import sys
 import singer
 import time
 import traceback
-import datetime
 import boto3
 
 from singer import metadata
@@ -125,13 +124,25 @@ def do_sync(config, catalog, state):
     grouped_logs.insert(0,"EXPORTS tap-s3-csv data_props: " + str(json_row_col))
     LOGGER.info("| ".join(grouped_logs))
 
-    # Write export metrics if path is provided (full path including filename)
+    # Write export metrics if S3 path is provided (either dict with bucket/key or s3:// URL string)
     export_metrics_s3_path = config.get('export_metrics_s3_path', None)
     if export_metrics_s3_path:
-        metrics_bucket = export_metrics_s3_path.get('bucket')
-        metrics_key = export_metrics_s3_path.get('key')
+        metrics_bucket = None
+        metrics_key = None
+
+        if isinstance(export_metrics_s3_path, dict):
+            metrics_bucket = export_metrics_s3_path.get('bucket')
+            metrics_key = export_metrics_s3_path.get('key')
+        elif isinstance(export_metrics_s3_path, str):
+            # Allow formats like "s3://bucket/key" or "bucket/key"
+            path = export_metrics_s3_path
+            if path.startswith("s3://"):
+                path = path[5:]
+            if "/" in path:
+                metrics_bucket, metrics_key = path.split("/", 1)
+
         if metrics_bucket and metrics_key:
-            write_export_metrics(metrics_bucket, metrics_key, total_row_count, current_col_count)
+            write_export_metrics(metrics_bucket, metrics_key, total_row_count, total_col_count)
 
     LOGGER.info('Done syncing.')
 
