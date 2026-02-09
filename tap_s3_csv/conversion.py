@@ -3,22 +3,43 @@ import pandas as pd
 import numpy as np
 
 LOGGER = singer.get_logger()
-DATE_FORMAT_MAPPING = {
+
+# pylint: disable=too-many-return-statements
+DATE_BASES = {
     '%Y-%m-%d': 'YYYY-MM-DD',
     '%m-%d-%Y': 'MM-DD-YYYY',
     '%d-%m-%Y': 'DD-MM-YYYY',
-    '%Y-%m-%d %H:%M:%S': 'YYYY-MM-DD',
-    '%m-%d-%Y %H:%M:%S': 'MM-DD-YYYY',
-    '%d-%m-%Y %H:%M:%S': 'DD-MM-YYYY',
     '%Y/%m/%d': 'YYYY/MM/DD',
     '%m/%d/%Y': 'MM/DD/YYYY',
     '%d/%m/%Y': 'DD/MM/YYYY',
-    '%Y/%m/%d %H:%M:%S': 'YYYY/MM/DD',
-    '%m/%d/%Y %H:%M:%S': 'MM/DD/YYYY',
-    '%d/%m/%Y %H:%M:%S': 'DD/MM/YYYY',
 }
+TIME_FMT = '%H:%M:%S'
+TIME_SEPARATORS = [' ', 'T']
+TIME_SUFFIXES = [
+    '',         # 23:45:12
+    '.%f',      # 23:45:12.123456
+    'Z',        # 23:45:12Z
+    '%z',       # 23:45:12+05:00
+    '.%fZ',     # 23:45:12.123456Z
+    '.%f%z',    # 23:45:12.123456+05:00
+]
 
-# pylint: disable=too-many-return-statements
+# generate all possible datetime formatting we support
+def generate_date_format_mapping():
+    mapping = {}
+    
+    for base_fmt, output_name in DATE_BASES.items():
+        # Date only (e.g., 2024-01-13)
+        mapping[base_fmt] = output_name
+        
+        # Date + time combinations
+        for sep in TIME_SEPARATORS:
+            for suffix in TIME_SUFFIXES:
+                full_fmt = f"{base_fmt}{sep}{TIME_FMT}{suffix}"
+                mapping[full_fmt] = output_name
+    
+    return mapping
+
 
 def infer_column(column, dateFormatMap, lengths):
     if column.isnull().all():
@@ -71,11 +92,11 @@ def infer_datetime(column, dateFormatMap):
         return False
     # pandas does not check the format properly
     return infer_datetime_and_format(tmpCol, dateFormatMap)
-            
+
 def infer_datetime_and_format(column, dateFormatMap):
     column = column[column.astype(bool)] # Ignore empty strings/blank rows - they fail parsing for all but the first format
 
-    for k,v in DATE_FORMAT_MAPPING.items():
+    for k,v in generate_date_format_mapping().items():
         try:
             column = pd.to_datetime(column, format=k)
             dateFormatMap[column.name] = v
