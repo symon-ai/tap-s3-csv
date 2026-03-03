@@ -95,16 +95,15 @@ def infer_datetime(column, dateFormatMap):
     return infer_datetime_and_format(tmpCol, dateFormatMap)
 
 def _all_values_match_format(column, fmt):
-    """Validates fmt against failed rows individually, distinguishing out-of-bounds
-    dates (acceptable) from genuine format mismatches (not acceptable)."""
+    # Validates fmt against failed rows individually. Uses datetime.strptime (year 1-9999)
+    # instead of pandas, out of bounds dates are accepted. Target to detect format mismatches here.
     coerced = pd.to_datetime(column, format=fmt, errors='coerce')
     failed = column[coerced.isna()]
     for val in failed:
         try:
             datetime.strptime(str(val), fmt)
-        except ValueError as e:
-            if 'Out of bounds' not in str(e):
-                return False
+        except ValueError:
+            return False
     return True
 
 
