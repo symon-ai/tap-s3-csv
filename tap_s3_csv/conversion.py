@@ -5,6 +5,41 @@ import numpy as np
 LOGGER = singer.get_logger()
 
 # pylint: disable=too-many-return-statements
+DATE_BASES = {
+    '%Y-%m-%d': 'YYYY-MM-DD',
+    '%m-%d-%Y': 'MM-DD-YYYY',
+    '%d-%m-%Y': 'DD-MM-YYYY',
+    '%Y/%m/%d': 'YYYY/MM/DD',
+    '%m/%d/%Y': 'MM/DD/YYYY',
+    '%d/%m/%Y': 'DD/MM/YYYY',
+}
+TIME_FMT = '%H:%M:%S'
+TIME_SEPARATORS = [' ', 'T']
+TIME_SUFFIXES = [
+    '',         # 23:45:12
+    '.%f',      # 23:45:12.123456
+    'Z',        # 23:45:12Z
+    '%z',       # 23:45:12+05:00
+    '.%fZ',     # 23:45:12.123456Z
+    '.%f%z',    # 23:45:12.123456+05:00
+]
+
+# generate all possible datetime formatting we support
+def generate_date_format_mapping():
+    mapping = {}
+    
+    for base_fmt, output_name in DATE_BASES.items():
+        # Date only (e.g., 2024-01-13)
+        mapping[base_fmt] = output_name
+        
+        # Date + time combinations
+        for sep in TIME_SEPARATORS:
+            for suffix in TIME_SUFFIXES:
+                full_fmt = f"{base_fmt}{sep}{TIME_FMT}{suffix}"
+                mapping[full_fmt] = output_name
+    
+    return mapping
+
 
 def infer_column(column, dateFormatMap, lengths):
     if column.isnull().all():
@@ -57,75 +92,20 @@ def infer_datetime(column, dateFormatMap):
         return False
     # pandas does not check the format properly
     return infer_datetime_and_format(tmpCol, dateFormatMap)
-            
+
 def infer_datetime_and_format(column, dateFormatMap):
     column = column[column.astype(bool)] # Ignore empty strings/blank rows - they fail parsing for all but the first format
 
-    try:
-        # Formats '%Y-%m-%d' and '%Y/%m/%d' seem work interchangeably in pd.to_datetime function
-        # e.g '2022-01-02' and '2022/01/02' would both pass pd.to_datetime using formats '%Y-%m-%d'
-        # and '%Y/%m/%d'
-        # Choose one cell to check if '/' is in the value and update dateFormatMap correctly
-        cell = column.dropna().min()
-        column = pd.to_datetime(column, format='%Y-%m-%d')
-        dateFormatMap[column.name] = 'YYYY/MM/DD' if '/' in cell else 'YYYY-MM-DD'
-        return True
-    except Exception as e:
-        # when the datetime is out of bounds, to_datetime would raise an exception with 'Out of bounds' in the message
-        # if the value is not a valid datetime, or the format is not supported, it would be different exception
-        # same for other format checks below
-        if 'Out of bounds' in str(e):
-            dateFormatMap[column.name] = 'YYYY/MM/DD' if '/' in cell else 'YYYY-MM-DD'
+    for k,v in generate_date_format_mapping().items():
+        try:
+            column = pd.to_datetime(column, format=k)
+            dateFormatMap[column.name] = v
             return True
-
-        pass
-
-    try:
-        column = pd.to_datetime(column, format='%m-%d-%Y')
-        dateFormatMap[column.name] = 'MM-DD-YYYY'
-        return True
-    except Exception as e:
-        if 'Out of bounds' in str(e):
-            LOGGER.debug("Date value out of bounds for pandas Timestamp: %s", e)
-            dateFormatMap[column.name] = 'MM-DD-YYYY'
-            return True
-
-        pass
-
-    try:
-        column = pd.to_datetime(column, format='%d-%m-%Y')
-        dateFormatMap[column.name] = 'DD-MM-YYYY'
-        return True
-    except Exception as e:
-        if 'Out of bounds' in str(e):
-            LOGGER.debug("Date value out of bounds for pandas Timestamp: %s", e)
-            dateFormatMap[column.name] = 'DD-MM-YYYY'
-            return True
-        pass
-
-    try:
-        column = pd.to_datetime(column, format='%m/%d/%Y')
-        dateFormatMap[column.name] = 'MM/DD/YYYY'
-        return True
-    except Exception as e:
-        if 'Out of bounds' in str(e):
-            LOGGER.debug("Date value out of bounds for pandas Timestamp: %s", e)
-            dateFormatMap[column.name] = 'MM/DD/YYYY'
-            return True
-        pass
-
-    try:
-        column = pd.to_datetime(column, format='%d/%m/%Y')
-        dateFormatMap[column.name] = 'DD/MM/YYYY'
-        return True
-    except Exception as e:
-        if 'Out of bounds' in str(e):
-            LOGGER.debug("Date value out of bounds for pandas Timestamp: %s", e)
-            dateFormatMap[column.name] = 'DD/MM/YYYY'
-            return True
-
-        pass
-
+        except Exception as e:
+            if 'Out of bounds' in str(e):
+                LOGGER.debug("Date value out of bounds for pandas Timestamp: %s", e)
+                dateFormatMap[column.name] = v
+                return True
     return False
 
 
