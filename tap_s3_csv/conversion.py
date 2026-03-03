@@ -118,11 +118,11 @@ def infer_datetime_and_format(column, dateFormatMap):
         except Exception as e:
             if 'Out of bounds' in str(e):
                 if _all_values_match_format(column, k):
-                    LOGGER.debug("Date value out of bounds for pandas Timestamp: %s", e)
+                    LOGGER.debug("Column '%s': accepted format '%s' with out-of-bounds dates", column.name, k)
                     dateFormatMap[column.name] = v
                     return True
-            else:
-                LOGGER.debug("Error parsing date: %s", e)
+
+    LOGGER.debug("Column '%s': no matching date format found", column.name)
     return False
 
 
