@@ -1,6 +1,7 @@
 import singer
 import pandas as pd
 import numpy as np
+from datetime import datetime
 
 LOGGER = singer.get_logger()
 
@@ -93,19 +94,36 @@ def infer_datetime(column, dateFormatMap):
     # pandas does not check the format properly
     return infer_datetime_and_format(tmpCol, dateFormatMap)
 
+def _all_values_match_format(column, fmt):
+    """Validates fmt against failed rows individually, distinguishing out-of-bounds
+    dates (acceptable) from genuine format mismatches (not acceptable)."""
+    coerced = pd.to_datetime(column, format=fmt, errors='coerce')
+    failed = column[coerced.isna()]
+    for val in failed:
+        try:
+            datetime.strptime(str(val), fmt)
+        except ValueError as e:
+            if 'Out of bounds' not in str(e):
+                return False
+    return True
+
+
 def infer_datetime_and_format(column, dateFormatMap):
     column = column[column.astype(bool)] # Ignore empty strings/blank rows - they fail parsing for all but the first format
 
-    for k,v in generate_date_format_mapping().items():
+    for k, v in generate_date_format_mapping().items():
         try:
             column = pd.to_datetime(column, format=k)
             dateFormatMap[column.name] = v
             return True
         except Exception as e:
             if 'Out of bounds' in str(e):
-                LOGGER.debug("Date value out of bounds for pandas Timestamp: %s", e)
-                dateFormatMap[column.name] = v
-                return True
+                if _all_values_match_format(column, k):
+                    LOGGER.debug("Date value out of bounds for pandas Timestamp: %s", e)
+                    dateFormatMap[column.name] = v
+                    return True
+            else:
+                LOGGER.debug("Error parsing date: %s", e)
     return False
 
 
