@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tap-s3-csv"
-version = "3.3.0"
+version = "3.4.0"
 description = "Singer.io tap for extracting CSV files from S3"
 authors = ["Stitch"]
 classifiers = ["Programming Language :: Python :: 3 :: Only"]
