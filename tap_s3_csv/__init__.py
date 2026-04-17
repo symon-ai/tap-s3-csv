@@ -26,7 +26,39 @@ ERROR_START_MARKER = '[tap_error_start]'
 ERROR_END_MARKER = '[tap_error_end]'
 
 
-def write_export_metrics(bucket, key, row_count, col_count):
+def _count_singer_col_types(schema: dict) -> tuple:
+    """Count column types from Singer JSON Schema properties."""
+    cols_string_count = cols_numeric_count = cols_datetime_count = cols_bool_count = 0
+    for _, prop_def in schema.get('properties', {}).items():
+        prop_type = prop_def.get('type', [])
+        prop_format = prop_def.get('format', '')
+        if isinstance(prop_type, str):
+            prop_type = [prop_type]
+        types = [t for t in prop_type if t != 'null']
+        primary_type = types[0] if types else 'string'
+        if prop_format in ('date-time', 'date'):
+            cols_datetime_count += 1
+        elif primary_type == 'boolean':
+            cols_bool_count += 1
+        elif primary_type in ('integer', 'number'):
+            cols_numeric_count += 1
+        elif prop_format == 'singer.decimal':
+            cols_numeric_count += 1
+        else:
+            cols_string_count += 1
+    return cols_string_count, cols_numeric_count, cols_datetime_count, cols_bool_count
+
+
+def write_export_metrics(
+    bucket,
+    key,
+    row_count,
+    col_count,
+    cols_string_count=0,
+    cols_numeric_count=0,
+    cols_datetime_count=0,
+    cols_bool_count=0,
+):
     """
     Write export metrics JSON to S3 for later aggregation.
     Non-breaking: wrapped in try/catch, logs errors but doesn't raise.
@@ -36,7 +68,11 @@ def write_export_metrics(bucket, key, row_count, col_count):
         metrics = {
             "metricType": "EXPORT",
             "rowCount": row_count,
-            "colCount": col_count
+            "colCount": col_count,
+            "colsStringCount": cols_string_count,
+            "colsNumericCount": cols_numeric_count,
+            "colsDatetimeCount": cols_datetime_count,
+            "colsBoolCount": cols_bool_count,
         }
         s3_client.put_object(
             Bucket=bucket,
@@ -75,6 +111,10 @@ def do_sync(config, catalog, state):
 
     # Export logs for row and col count
     total_col_count = 0
+    total_cols_string_count = 0
+    total_cols_numeric_count = 0
+    total_cols_datetime_count = 0
+    total_cols_bool_count = 0
     current_col_count = 0
     total_row_count = 0
     grouped_logs=[]
@@ -108,6 +148,11 @@ def do_sync(config, catalog, state):
         if "properties" in stream['schema']:
             current_col_count = len(stream['schema']["properties"].items())
             total_col_count += current_col_count
+            _cs, _cn, _cd, _cb = _count_singer_col_types(stream['schema'])
+            total_cols_string_count += _cs
+            total_cols_numeric_count += _cn
+            total_cols_datetime_count += _cd
+            total_cols_bool_count += _cb
             json_row_col = {"name": name, "stream_id":stream_name, "row": counter_value, "col": current_col_count}
             grouped_logs.append("individual_file_data_props: " + str(json_row_col))
         total_row_count += counter_value
@@ -142,7 +187,16 @@ def do_sync(config, catalog, state):
                 metrics_bucket, metrics_key = path.split("/", 1)
 
         if metrics_bucket and metrics_key:
-            write_export_metrics(metrics_bucket, metrics_key, total_row_count, total_col_count)
+            write_export_metrics(
+                metrics_bucket,
+                metrics_key,
+                total_row_count,
+                total_col_count,
+                cols_string_count=total_cols_string_count,
+                cols_numeric_count=total_cols_numeric_count,
+                cols_datetime_count=total_cols_datetime_count,
+                cols_bool_count=total_cols_bool_count,
+            )
 
     LOGGER.info('Done syncing.')
 
