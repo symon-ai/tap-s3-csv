@@ -21,6 +21,8 @@ pandas = "2.3.3"
 [tool.poetry.group.dev]
 optional = true
 
+[tool.poetry.group.dev.dependencies]
+
 [tool.poetry.group.security-overrides.dependencies]
 urllib3 = "^2.7.0"
 pyarrow = "^23.0.1"
