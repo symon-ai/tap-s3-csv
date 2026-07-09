@@ -45,6 +45,39 @@ def log_backoff_attempt(details):
         "Error detected communicating with Amazon, triggering backoff: %d try", details.get("tries"))
 
 
+def build_symon_exception_from_client_error(error, bucket=None):
+    """
+    Translate a botocore ClientError into a user-friendly SymonException so the user is
+    told what to fix in their AWS setup instead of receiving a raw stack trace.
+
+    Returns the original error unchanged when it isn't a permission error we can explain.
+    """
+    aws_error = getattr(error, 'response', {}).get('Error', {})
+    aws_error_code = aws_error.get('Code', '')
+    aws_error_message = aws_error.get('Message', '') or str(error)
+    bucket_ref = f' "{bucket}"' if bucket else ''
+
+    if aws_error_code in ('AccessDenied', 'AccessDeniedException', 'KMSAccessDeniedException'):
+        # The source bucket/objects are encrypted with a KMS key the connection's role can't use.
+        # Reading an SSE-KMS encrypted object requires the kms:Decrypt action on that key.
+        if 'kms:' in aws_error_message or 'ciphertext' in aws_error_message.lower():
+            return SymonException(
+                f'Unable to read from Amazon S3 bucket{bucket_ref} because the AWS role used by this connection is '
+                f'missing AWS KMS permissions. The source data is encrypted with a KMS key, and reading it requires '
+                f'the "kms:Decrypt" action on that key. Update the IAM policy for the role used by this connection '
+                f'(and the KMS key policy, if it restricts key users) to grant this permission, then try again.',
+                'amazonS3.accessDeniedError'
+            )
+        return SymonException(
+            f'Unable to access Amazon S3 bucket{bucket_ref} because the AWS role used by this connection is not '
+            f'authorized to perform the required action. Ensure the policy associated with this connection grants the '
+            f'appropriate S3 permissions, then try again.',
+            'amazonS3.accessDeniedError'
+        )
+
+    return error
+
+
 class AssumeRoleProvider():
     METHOD = 'assume-role'
 

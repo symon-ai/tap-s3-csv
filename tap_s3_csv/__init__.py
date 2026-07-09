@@ -5,6 +5,7 @@ import time
 import traceback
 import boto3
 
+from botocore.exceptions import ClientError
 from singer import metadata
 from tap_s3_csv.discover import discover_streams
 from tap_s3_csv import s3
@@ -245,23 +246,29 @@ def main():
 
         config['tables'] = validate_table_config(config)
 
-        # If external_id is provided, we are trying to access files in another AWS account, and need to assume the role
-        if external_source:
-            s3.setup_aws_client(config)
-        # Otherwise, confirm that we can access the bucket in our own AWS account
-        else:
-            try:
-                for page in s3.list_files_in_bucket(config['bucket']):
-                    break
-            except BaseException as err:
-                LOGGER.error(err)
+        try:
+            # If external_id is provided, we are trying to access files in another AWS account, and need to assume the role
+            if external_source:
+                s3.setup_aws_client(config)
+            # Otherwise, confirm that we can access the bucket in our own AWS account
+            else:
+                try:
+                    for page in s3.list_files_in_bucket(config['bucket']):
+                        break
+                except BaseException as err:
+                    LOGGER.error(err)
 
-            # If not external source, it is from importing csv (replacement for tap-csv)
-            dialect.detect_tables_dialect(config)
-        if args.discover:
-            do_discover(args.config)
-        elif args.properties:
-            do_sync(config, args.properties, args.state)
+                # If not external source, it is from importing csv (replacement for tap-csv)
+                dialect.detect_tables_dialect(config)
+            if args.discover:
+                do_discover(args.config)
+            elif args.properties:
+                do_sync(config, args.properties, args.state)
+        except ClientError as e:
+            symon_error = s3.build_symon_exception_from_client_error(e, config.get('bucket'))
+            if symon_error is e:
+                raise
+            raise symon_error from e
     except SymonException as e:
         exc_type, exc_value, exc_traceback = sys.exc_info()
         error_info = {
