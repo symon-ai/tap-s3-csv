@@ -265,10 +265,12 @@ def main():
             elif args.properties:
                 do_sync(config, args.properties, args.state)
         except ClientError as e:
-            symon_error = s3.build_symon_exception_from_client_error(e, config.get('bucket'))
-            if symon_error is e:
-                raise
-            raise symon_error from e
+            if external_source:
+                symon_error = s3.build_symon_exception_from_client_error(e, config.get('bucket'))
+                if symon_error is e:
+                    raise
+                raise symon_error from e
+            raise
     except SymonException as e:
         exc_type, exc_value, exc_traceback = sys.exc_info()
         error_info = {
