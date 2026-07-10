@@ -46,17 +46,11 @@ def log_backoff_attempt(details):
 
 
 def build_symon_exception_from_client_error(error, bucket=None):
-    """
-    Translate a botocore ClientError into a user-friendly SymonException so the user is
-    told what to fix in their AWS setup instead of receiving a raw stack trace.
-
-    Returns the original error unchanged when it isn't a permission error we can explain.
-    """
+    """Map AccessDenied ClientErrors to SymonException; return other errors unchanged."""
     aws_error = getattr(error, 'response', {}).get('Error', {})
     aws_error_code = aws_error.get('Code', '')
 
     if aws_error_code in ('AccessDenied', 'AccessDeniedException', 'KMSAccessDeniedException'):
-        # Match the export-side amazonS3.accessDeniedError wording so import and export show the same message.
         if bucket:
             return SymonException(
                 f'Unable to access bucket "{bucket}". Ensure the policy associated with this connection in your AWS '
