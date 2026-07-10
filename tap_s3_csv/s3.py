@@ -51,15 +51,10 @@ def build_symon_exception_from_client_error(error, bucket=None):
     aws_error_code = aws_error.get('Code', '')
 
     if aws_error_code in ('AccessDenied', 'AccessDeniedException', 'KMSAccessDeniedException'):
-        if bucket:
-            return SymonException(
-                f'Unable to access bucket "{bucket}". Ensure the policy associated with this connection in your AWS '
-                f'account grants the appropriate permissions.',
-                'amazonS3.accessDeniedError'
-            )
+        bucket_ref = f' "{bucket}"' if bucket else ''
         return SymonException(
-            'Unable to access bucket. Ensure the policy associated with this connection in your AWS account grants '
-            'the appropriate permissions.',
+            f'Unable to access bucket{bucket_ref}. Ensure the policy associated with this connection in your AWS '
+            f'account grants the appropriate permissions.',
             'amazonS3.accessDeniedError'
         )
 
