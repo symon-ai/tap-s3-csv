@@ -45,6 +45,22 @@ def log_backoff_attempt(details):
         "Error detected communicating with Amazon, triggering backoff: %d try", details.get("tries"))
 
 
+def build_symon_exception_from_client_error(error, bucket=None):
+    """Map AccessDenied ClientErrors to SymonException; return other errors unchanged."""
+    aws_error = getattr(error, 'response', {}).get('Error', {})
+    aws_error_code = aws_error.get('Code', '')
+
+    if aws_error_code in ('AccessDenied', 'AccessDeniedException', 'KMSAccessDeniedException'):
+        bucket_ref = f' "{bucket}"' if bucket else ''
+        return SymonException(
+            f'Unable to access bucket{bucket_ref}. Ensure the policy associated with this connection in your AWS '
+            f'account grants the appropriate permissions.',
+            'amazonS3.accessDeniedError'
+        )
+
+    return error
+
+
 class AssumeRoleProvider():
     METHOD = 'assume-role'
 
