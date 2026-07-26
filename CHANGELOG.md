@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.8.1
+
+- Security (CWE-73): Sanitize the gzip-embedded original filename before using it to build a path. The filename read from the gzip header (RFC 1952 FNAME) is attacker-controlled and was concatenated into a filesystem/S3 path in `sync.sync_gz_file` and `s3.sampling_gz_file`, allowing path-traversal (`../`, absolute paths, embedded separators). Added a centralized `utils.sanitize_gz_file_name` allowlist-style routine that reduces the name to a safe basename and rejects traversal components. (WP-32445)
+
 ## 1.3.6
 
 - Reintroduce ability to assume role for external AWS account

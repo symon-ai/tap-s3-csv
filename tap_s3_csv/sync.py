@@ -234,6 +234,15 @@ def sync_gz_file(config, s3_path, table_spec, stream, file_handler):
         return 0
 
     if gz_file_name:
+        # The gzip-embedded original filename is attacker-controlled; sanitize it
+        # to a safe basename so path-traversal sequences cannot escape the
+        # intended location before it is used to build a path (CWE-73).
+        gz_file_name = utils.sanitize_gz_file_name(gz_file_name)
+        if not gz_file_name:
+            LOGGER.warning(
+                'Skipping "%s" file as the embedded file name is not valid', s3_path)
+            s3.skipped_files_count = s3.skipped_files_count + 1
+            return 0
 
         if gz_file_name.endswith(".gz"):
             LOGGER.warning(

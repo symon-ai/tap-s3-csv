@@ -289,6 +289,16 @@ def sampling_gz_file(table_spec, s3_path, file_handle, sample_rate):
         return []
 
     if gz_file_name:
+        # The gzip-embedded original filename is attacker-controlled; sanitize it
+        # to a safe basename so path-traversal sequences cannot escape the
+        # intended location before it is used to build a path (CWE-73).
+        gz_file_name = utils.sanitize_gz_file_name(gz_file_name)
+        if not gz_file_name:
+            LOGGER.warning(
+                'Skipping "%s" file as the embedded file name is not valid', s3_path)
+            skipped_files_count = skipped_files_count + 1
+            return []
+
         if gz_file_name.endswith(".gz"):
             LOGGER.warning(
                 'Skipping "%s" file as it contains nested compression.', s3_path)

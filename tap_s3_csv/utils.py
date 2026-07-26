@@ -1,5 +1,40 @@
 import gzip
+import os
 import struct
+
+
+def sanitize_gz_file_name(name):
+    """Sanitize a filename extracted from a gzip header (RFC 1952 FNAME).
+
+    The embedded original filename is fully attacker-controlled and must never
+    be trusted when building a filesystem/S3 path (CWE-73). We reduce it to a
+    single safe path component by stripping any directory information and
+    rejecting path-traversal sequences. This is an allowlist-style reduction:
+    only a bare basename with no separators or ``..`` components survives.
+
+    Returns the safe basename, or ``None`` if the name resolves to nothing
+    usable (e.g. it was empty, ``.``, ``..``, or only separators).
+    """
+    if not name:
+        return None
+
+    # Normalize both separator styles so a Windows-style path cannot smuggle a
+    # component past os.path.basename on a posix host.
+    candidate = name.replace("\\", "/")
+
+    # Collapse to the final path component, dropping any leading/absolute path
+    # or ``../`` traversal prefix the tainted name may carry.
+    candidate = os.path.basename(candidate)
+
+    # Reject residual traversal / empty components outright.
+    if candidate in ("", ".", ".."):
+        return None
+
+    # Defense in depth: a basename must not still contain a separator.
+    if "/" in candidate or "\\" in candidate:
+        return None
+
+    return candidate
 
 
 def get_file_name_from_gzfile(filename=None, fileobj=None):
