@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.8.1
+
+- Security (WP-33414): Remediate Veracode CWE-73 (External Control of File Name or Path) in the gzip handling path. The inner filename read from a gzip FNAME header is now sanitized in the centralized `utils.get_file_name_from_gzfile` routine so it cannot carry directory separators or `..` traversal into the constructed file path used by `sync.py` and `s3.py`.
+
 ## 1.3.6
 
 - Reintroduce ability to assume role for external AWS account
