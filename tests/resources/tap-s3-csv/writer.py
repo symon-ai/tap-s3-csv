@@ -4,6 +4,11 @@ import sys
 import random
 import datetime
 
+# CWE-331: use an os.urandom-backed cryptographically secure RNG for all
+# random-data generation below. SystemRandom is a drop-in replacement for
+# randint/uniform/random and preserves the same value ranges/types.
+random = random.SystemRandom()
+
 MAX_POS_DOUBLE = 1.7976931348623157E+308
 MAX_POS_FLOAT = 3.402823466E+38
 MAX_NEG_DOUBLE = -1.7976931348623157E+308
