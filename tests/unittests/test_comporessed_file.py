@@ -206,6 +206,39 @@ class TestCompressedFileSupport(unittest.TestCase):
 
             self.assertEqual(expected_output, actual_output)
 
+    @staticmethod
+    def _build_gz_bytes_with_inner_name(inner_name):
+        # Build a minimal gzip header (RFC 1952) carrying an FNAME field so the
+        # inner filename read by get_file_name_from_gzfile is fully controlled.
+        header = b'\x1f\x8b' + bytes([8, gzip.FNAME]) + b'\x00\x00\x00\x00' + b'\x00' + b'\xff'
+        return header + inner_name.encode('latin1') + b'\x00'
+
+    def test_gz_inner_filename_rejects_path_traversal(self):
+        # WP-33414 / CWE-73: a gzip whose FNAME header embeds path separators or
+        # ".." must not leak those directory components to the caller, which
+        # concatenates the returned name into a path (s3_path + "/" + name).
+        for malicious in [
+            "../../../../etc/passwd.csv",
+            "/etc/passwd.csv",
+            "..\\..\\windows\\system32\\evil.csv",
+            "subdir/data.csv",
+        ]:
+            fileobj = io.BytesIO(self._build_gz_bytes_with_inner_name(malicious))
+            actual = utils.get_file_name_from_gzfile(fileobj=fileobj)
+            self.assertNotIn("/", actual or "")
+            self.assertNotIn("\\", actual or "")
+            self.assertNotIn("..", actual or "")
+
+        # A residual traversal-only name must be rejected outright.
+        for traversal_only in ["..", "../", "../../"]:
+            fileobj = io.BytesIO(self._build_gz_bytes_with_inner_name(traversal_only))
+            self.assertIsNone(utils.get_file_name_from_gzfile(fileobj=fileobj))
+
+    def test_gz_inner_filename_preserves_normal_name(self):
+        # A legitimate bare filename must still be returned unchanged.
+        fileobj = io.BytesIO(self._build_gz_bytes_with_inner_name("data.csv"))
+        self.assertEqual("data.csv", utils.get_file_name_from_gzfile(fileobj=fileobj))
+
 
     @mock.patch("tap_s3_csv.sync.sync_compressed_file")
     def test_syncing_of_compressed_zip_file(self, mocked_sync_compressed_file):

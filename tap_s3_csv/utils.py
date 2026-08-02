@@ -1,5 +1,33 @@
 import gzip
+import ntpath
+import posixpath
 import struct
+
+
+def _sanitize_gz_inner_filename(name):
+    """Sanitize a filename read from a gzip FNAME header.
+
+    The inner filename originates from user-supplied gzip data and is later
+    concatenated into a path (e.g. ``s3_path + "/" + gz_file_name``). Per
+    RFC 1952 the FNAME field is the original name with directory components
+    removed, so any embedded path separators (``/`` or ``\\``) or parent
+    references (``..``) indicate path manipulation (CWE-73). Strip every
+    directory component and reject traversal so only a bare filename remains.
+    """
+    if not name:
+        return name
+
+    # Collapse both POSIX and Windows separators to their basename so that a
+    # crafted header such as "../../etc/passwd.csv" cannot escape the intended
+    # location.
+    base = posixpath.basename(ntpath.basename(name))
+
+    # After stripping directory components a residual "." / ".." (or empty)
+    # value is not a usable filename and must not be trusted.
+    if base in ("", ".", ".."):
+        return None
+
+    return base
 
 
 def get_file_name_from_gzfile(filename=None, fileobj=None):
@@ -40,7 +68,11 @@ def get_file_name_from_gzfile(filename=None, fileobj=None):
             if not s or s == b'\000':
                 break
             _fname.append(s)
-        return ''.join([s.decode('latin1') for s in _fname])
+        # The FNAME field is user-supplied data. Sanitize it before returning
+        # so callers cannot use it to build a path that escapes the intended
+        # location (CWE-73 path manipulation).
+        return _sanitize_gz_inner_filename(
+            ''.join([s.decode('latin1') for s in _fname]))
 
     return None
 
