@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.8.1
+
+- Remediate Veracode CWE-331 (insufficient entropy / insecure PRNG) in `tests/resources/tap-s3-csv/writer.py` by routing the fixture generator's randomness through `secrets.SystemRandom()` instead of the `random` module. Call signatures and generated CSV output shape are preserved (WP-33327).
+
 ## 1.3.6
 
 - Reintroduce ability to assume role for external AWS account
