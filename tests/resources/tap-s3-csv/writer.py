@@ -4,6 +4,11 @@ import sys
 import random
 import datetime
 
+# CWE-331: use a cryptographically secure PRNG (os.urandom-backed) as the
+# module-level random source. SystemRandom inherits randint/uniform/random
+# from random.Random, so every existing random.* call site below is covered.
+random = random.SystemRandom()
+
 MAX_POS_DOUBLE = 1.7976931348623157E+308
 MAX_POS_FLOAT = 3.402823466E+38
 MAX_NEG_DOUBLE = -1.7976931348623157E+308
