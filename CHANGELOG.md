@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.8.1
+
+- Remediate Veracode CWE-331 in `tap_s3_csv/dialect.py`: replace the standard `random` PRNG used to pad chardet encoding-detection sample lines with deterministic evenly-spaced index selection. Preserves the reproducible, order-preserving sampling behavior (WP-33420).
+
 ## 1.3.6
 
 - Reintroduce ability to assume role for external AWS account
