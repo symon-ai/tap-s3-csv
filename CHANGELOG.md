@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.8.1
+
+- Remediate CWE-331 (Insufficient Entropy) in `tests/resources/tap-s3-csv/writer.py`: route the CSV fixture data generator's random calls through `random.SystemRandom` (OS CSPRNG) instead of the non-cryptographic module-level `random.*` functions [WP-33364]
+
 ## 1.3.6
 
 - Reintroduce ability to assume role for external AWS account
