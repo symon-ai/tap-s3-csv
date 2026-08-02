@@ -4,6 +4,12 @@ import sys
 import random
 import datetime
 
+# CWE-331: rebind the module-level `random` reference to a cryptographically
+# secure RNG (os.urandom-backed) so every random.* call site in this
+# test-fixture generator draws from a secure entropy source. SystemRandom
+# inherits randint/uniform/random from random.Random, so behavior is preserved.
+random = random.SystemRandom()
+
 MAX_POS_DOUBLE = 1.7976931348623157E+308
 MAX_POS_FLOAT = 3.402823466E+38
 MAX_NEG_DOUBLE = -1.7976931348623157E+308
