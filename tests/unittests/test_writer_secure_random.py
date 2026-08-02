@@ -1,4 +1,5 @@
 import os
+import re
 import random
 import unittest
 import importlib.util
@@ -18,15 +19,44 @@ def _load_writer():
     return module
 
 
+def _writer_source():
+    with open(WRITER_PATH, "r", encoding="utf-8") as handle:
+        return handle.read()
+
+
+def _strip_comments(source):
+    # Drop line comments so token assertions inspect executable code only,
+    # not the explanatory CWE-331 remediation comment.
+    return "\n".join(line.split("#", 1)[0] for line in source.splitlines())
+
+
 class TestWriterSecureRandom(unittest.TestCase):
     """WP-33340: CWE-331 remediation for the tap-s3-csv fixture generator."""
 
-    def test_module_random_is_system_random(self):
+    def test_secure_random_is_system_random(self):
         # Regression for CWE-331: the fixture generator must draw from a
         # cryptographically secure (os.urandom-backed) source, not the
         # default insufficient-entropy Mersenne-Twister global.
         writer = _load_writer()
-        self.assertIsInstance(writer.random, random.SystemRandom)
+        self.assertIsInstance(writer._secure_random, random.SystemRandom)
+
+    def test_no_residual_insufficient_entropy_call_signature(self):
+        # R5 scanner-recognition gate: Veracode CWE-331 keys on the
+        # `random.random()/randint()/uniform()` stdlib-global CALL signature
+        # at the flagged sink. After remediation NO such bare call may remain
+        # anywhere in the fixture generator; every draw must go through the
+        # secure SystemRandom instance instead.
+        code = _strip_comments(_writer_source())
+        residual = re.findall(r"(?<![\w.])random\.(?:random|randint|uniform)\s*\(", code)
+        self.assertEqual(
+            residual, [],
+            "Found residual insufficient-entropy stdlib random.* call(s): %r" % residual,
+        )
+        # And the secure instance IS the source of the draws.
+        self.assertTrue(
+            re.search(r"_secure_random\.(?:random|randint|uniform)\s*\(", code),
+            "Fixture generation must draw from the secure SystemRandom instance.",
+        )
 
     def test_percentage_generator_still_produces_valid_output(self):
         # Behaviour must be preserved: the flagged generator still returns
