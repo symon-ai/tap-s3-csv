@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.8.1
+
+- Security (CWE-331): source randomness in the CSV test-data generator (`tests/resources/tap-s3-csv/writer.py`) from a cryptographically secure `random.SystemRandom` instance instead of the module-global Mersenne-Twister PRNG. No change to generated CSV structure or the tap's runtime behavior.
+
 ## 1.3.6
 
 - Reintroduce ability to assume role for external AWS account
