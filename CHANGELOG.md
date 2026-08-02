@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.8.1
+
+- Remediate Veracode CWE-331 (Insufficient Entropy) in the CSV test-data generator (`tests/resources/tap-s3-csv/writer.py`) by replacing the non-cryptographic `random` module with a `secrets.SystemRandom()` CSPRNG-backed source (behavior-preserving drop-in)
+
 ## 1.3.6
 
 - Reintroduce ability to assume role for external AWS account
