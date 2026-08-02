@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.8.1
+
+- WP-33422: Remediate CWE-73 (Path Manipulation) in `main()` by validating and confining the user-supplied `error_file_path` config value before passing it to `open()`; absolute paths and parent-directory traversal are rejected
+
 ## 1.3.6
 
 - Reintroduce ability to assume role for external AWS account
