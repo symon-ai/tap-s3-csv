@@ -2,6 +2,10 @@ import csv
 import itertools
 import sys
 import random
+# CWE-331: rebind to a cryptographically secure PRNG (os.urandom-backed).
+# SystemRandom inherits random/randint/uniform, so every call site below
+# uses sufficient entropy without any behavioural change.
+random = random.SystemRandom()
 import datetime
 
 MAX_POS_DOUBLE = 1.7976931348623157E+308
