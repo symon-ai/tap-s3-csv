@@ -233,6 +233,11 @@ def sync_gz_file(config, s3_path, table_spec, stream, file_handler):
         s3.skipped_files_count = s3.skipped_files_count + 1
         return 0
 
+    # The embedded original filename is user-supplied (it comes from the gzip
+    # header of the uploaded file), so sanitize it before building a path to
+    # prevent path traversal (CWE-73).
+    gz_file_name = utils.sanitize_gz_file_name(gz_file_name)
+
     if gz_file_name:
 
         if gz_file_name.endswith(".gz"):

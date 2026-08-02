@@ -1,5 +1,33 @@
 import gzip
+import os
 import struct
+
+
+def sanitize_gz_file_name(file_name):
+    """Sanitize the original filename embedded in a gzip header before it is
+    used to build a downstream file path.
+
+    The embedded name is user-supplied (it comes from the uploaded file's gzip
+    header), so it must never be allowed to traverse directories or escape the
+    expected location (CWE-73 / path manipulation). We normalize path
+    separators and keep only the final path component, and reject any residual
+    parent-directory references.
+    """
+    if not file_name:
+        return file_name
+
+    # Normalize Windows separators, then keep only the final path component so
+    # that any embedded directory traversal (e.g. "../../etc/passwd") is
+    # stripped down to a bare filename.
+    normalized = file_name.replace("\\", "/")
+    base_name = os.path.basename(normalized)
+
+    # basename of names like ".." or "foo/" can still be empty or a traversal
+    # token; treat those as invalid so callers skip the file.
+    if base_name in ("", ".", ".."):
+        return ""
+
+    return base_name
 
 
 def get_file_name_from_gzfile(filename=None, fileobj=None):
