@@ -1,5 +1,4 @@
 import re
-import random
 import csv
 
 import singer
@@ -104,13 +103,19 @@ def detect_dialect(config, s3_file, table):
             break
 
     if detect_encoding:
-        # finish preparing interesting lines - pad with non-interesting lines, keep original file order
-        random.seed(0)
+        # finish preparing interesting lines - pad with non-interesting lines, keep original file order.
+        # We deterministically pad with evenly spaced line indices across the file rather than a
+        # pseudo-random sample (Veracode CWE-331). This is not a security-sensitive selection; the
+        # goal is only reproducible, well-distributed sampling for chardet, which even spacing gives
+        # us without a standard PRNG.
         remainder = min(MAX_CHARDET_LINES - len(interesting), lines_read - 1)
 
-        for _ in range(remainder):
-            i = random.randint(1, lines_read - 1)
-            interesting.append(i)
+        if remainder > 0:
+            span = lines_read - 1
+            for n in range(remainder):
+                # evenly distribute picks across lines [1, lines_read - 1]
+                i = 1 + (n * span) // remainder
+                interesting.append(i)
         interesting.sort()
 
         # get rid of repeating lines that may skew detector
