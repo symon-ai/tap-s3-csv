@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import singer
 import time
@@ -229,6 +230,36 @@ def validate_table_config(config):
     return CONFIG_CONTRACT(tables_config)
 
 
+def _resolve_confined_error_file_path(error_file_path, base_dir=None):
+    """Validate and confine a user-supplied error_file_path (CWE-73 remediation).
+
+    The path comes from the tap config (user-supplied JSON) and is passed to
+    open() for writing, so it must be constrained to prevent path traversal /
+    arbitrary file write. Absolute paths and parent-directory traversal are
+    rejected; the path is resolved against base_dir (defaults to the current
+    working directory) and must stay inside it. Returns the safe absolute path,
+    or None if the path is unsafe.
+    """
+    if not error_file_path or not isinstance(error_file_path, str):
+        return None
+
+    if base_dir is None:
+        base_dir = os.getcwd()
+    base_dir = os.path.realpath(base_dir)
+
+    # Reject absolute paths outright - error files must be relative to base_dir.
+    if os.path.isabs(error_file_path):
+        return None
+
+    resolved = os.path.realpath(os.path.join(base_dir, error_file_path))
+
+    # Confine to base_dir: resolved must be base_dir itself or a descendant.
+    if resolved != base_dir and not resolved.startswith(base_dir + os.sep):
+        return None
+
+    return resolved
+
+
 @singer.utils.handle_top_exception(LOGGER)
 def main():
     try:
@@ -291,11 +322,18 @@ def main():
             try:
                 error_file_path = args.config.get('error_file_path', None)
                 if error_file_path is not None:
-                    try:
-                        with open(error_file_path, 'w', encoding='utf-8') as fp:
-                            json.dump(error_info, fp)
-                    except:
-                        pass
+                    # error_file_path is user-supplied config; validate and
+                    # confine it to prevent path traversal / arbitrary file
+                    # write (CWE-73) before passing it to open().
+                    safe_error_file_path = _resolve_confined_error_file_path(error_file_path)
+                    if safe_error_file_path is not None:
+                        try:
+                            with open(safe_error_file_path, 'w', encoding='utf-8') as fp:
+                                json.dump(error_info, fp)
+                        except:
+                            pass
+                    else:
+                        LOGGER.warning('Ignoring unsafe error_file_path config value')
                 # log error info as well in case file is corrupted
                 error_info_json = json.dumps(error_info)
                 error_start_marker = args.config.get('error_start_marker', ERROR_START_MARKER)
