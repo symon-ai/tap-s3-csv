@@ -1,8 +1,13 @@
 import csv
 import itertools
 import sys
-import random
+import secrets
 import datetime
+
+# CWE-331: use a cryptographically-secure RNG instead of the standard `random`
+# module. SystemRandom exposes randint/random/uniform with identical call
+# signatures, so the generated test-fixture data remains equivalent.
+random = secrets.SystemRandom()
 
 MAX_POS_DOUBLE = 1.7976931348623157E+308
 MAX_POS_FLOAT = 3.402823466E+38
