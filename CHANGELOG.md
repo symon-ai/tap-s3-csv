@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.8.1
+
+- Fix CWE-73 path manipulation (WP-33417): sanitize the gzip-embedded original filename before using it to build a downstream file path in the gz sampling and sync code paths
+
 ## 1.3.6
 
 - Reintroduce ability to assume role for external AWS account

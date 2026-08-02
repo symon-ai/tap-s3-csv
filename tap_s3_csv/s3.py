@@ -288,6 +288,11 @@ def sampling_gz_file(table_spec, s3_path, file_handle, sample_rate):
         skipped_files_count = skipped_files_count + 1
         return []
 
+    # The embedded original filename is user-supplied (it comes from the gzip
+    # header of the uploaded file), so sanitize it before building a path to
+    # prevent path traversal (CWE-73).
+    gz_file_name = utils.sanitize_gz_file_name(gz_file_name)
+
     if gz_file_name:
         if gz_file_name.endswith(".gz"):
             LOGGER.warning(
