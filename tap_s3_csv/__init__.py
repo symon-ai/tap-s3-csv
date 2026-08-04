@@ -12,13 +12,13 @@ from tap_s3_csv import s3
 from tap_s3_csv.sync import sync_stream
 from tap_s3_csv.config import CONFIG_CONTRACT
 from tap_s3_csv import dialect
+from tap_s3_csv import aws_auth
+from tap_s3_csv.aws_auth import AwsAuthMode
 from tap_s3_csv.symon_exception import SymonException
 
 LOGGER = singer.get_logger()
 
-REQUIRED_CONFIG_KEYS = ["bucket"]
-REQUIRED_CONFIG_KEYS_EXTERNAL_SOURCE = [
-    "bucket", "account_id", "external_id", "role_name"]
+REQUIRED_CONFIG_KEYS = aws_auth.REQUIRED_CONFIG_KEYS_DEFAULT
 
 IMPORT_PERF_METRICS_LOG_PREFIX = "IMPORT_PERF_METRICS:"
 
@@ -237,19 +237,22 @@ def main():
         args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS)
         config = args.config
 
-        external_source = False
-
-        if 'external_id' in config:
-            args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS_EXTERNAL_SOURCE)
+        auth_mode = aws_auth.detect_auth_mode(config)
+        required_config_keys = aws_auth.get_required_config_keys(auth_mode)
+        if required_config_keys != REQUIRED_CONFIG_KEYS:
+            args = singer.utils.parse_args(required_config_keys)
             config = args.config
-            external_source = True
+            auth_mode = aws_auth.detect_auth_mode(config)
+
+        external_source = aws_auth.is_external_auth(auth_mode)
 
         config['tables'] = validate_table_config(config)
 
         try:
-            # If external_id is provided, we are trying to access files in another AWS account, and need to assume the role
-            if external_source:
+            if auth_mode == AwsAuthMode.ROLE:
                 s3.setup_aws_client(config)
+            elif auth_mode == AwsAuthMode.ACCESS_KEY:
+                s3.setup_aws_access_key_client(config)
             # Otherwise, confirm that we can access the bucket in our own AWS account
             else:
                 try:
