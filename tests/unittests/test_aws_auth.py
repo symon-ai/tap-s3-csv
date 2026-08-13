@@ -53,6 +53,17 @@ class TestAwsAuthDetection(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'not both'):
             aws_auth.detect_auth_mode(config)
 
+    def test_rejects_role_config_with_session_token(self):
+        config = {
+            'bucket': 'my-bucket',
+            'account_id': '111222333444',
+            'role_name': 'my-role',
+            'external_id': 'external-id',
+            'aws_session_token': 'token',
+        }
+        with self.assertRaisesRegex(ValueError, 'not both'):
+            aws_auth.detect_auth_mode(config)
+
     def test_rejects_incomplete_role_config(self):
         config = {
             'bucket': 'my-bucket',
@@ -84,6 +95,16 @@ class TestAwsAuthDetection(unittest.TestCase):
             'aws_secret_access_key': '',
         }
         with self.assertRaisesRegex(ValueError, 'Incomplete access key config'):
+            aws_auth.detect_auth_mode(config)
+
+    def test_rejects_blank_role_config(self):
+        config = {
+            'bucket': 'my-bucket',
+            'account_id': '',
+            'role_name': '',
+            'external_id': '',
+        }
+        with self.assertRaisesRegex(ValueError, 'Incomplete role assumption config'):
             aws_auth.detect_auth_mode(config)
 
     def test_is_external_auth(self):

@@ -27,6 +27,8 @@ def detect_auth_mode(config):
 
     has_any_role_key = any(role_keys_present)
     has_any_access_key_key = any(access_key_keys_present.values())
+    has_role_config = any(key in config for key in ROLE_CONFIG_KEYS)
+    has_access_key_config = any(key in config for key in ACCESS_KEY_CONFIG_KEYS)
 
     if has_any_role_key and has_any_access_key_key:
         raise ValueError(
@@ -35,7 +37,7 @@ def detect_auth_mode(config):
             '(aws_access_key_id, aws_secret_access_key), not both.'
         )
 
-    if has_any_role_key:
+    if has_any_role_key or (has_role_config and not has_any_access_key_key):
         if not all(role_keys_present):
             missing_keys = [
                 key for key, present in zip(ROLE_CONFIG_KEYS, role_keys_present)
@@ -47,7 +49,7 @@ def detect_auth_mode(config):
             )
         return AwsAuthMode.ROLE
 
-    if has_any_access_key_key:
+    if has_any_access_key_key or has_access_key_config:
         missing_keys = [
             key for key in ACCESS_KEY_REQUIRED_KEYS
             if not access_key_keys_present[key]
