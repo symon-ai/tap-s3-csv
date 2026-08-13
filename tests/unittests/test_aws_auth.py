@@ -62,7 +62,7 @@ class TestAwsAuthDetection(unittest.TestCase):
             'aws_session_token': 'token',
         }
         with self.assertRaisesRegex(ValueError, 'not both'):
-            aws_auth.detect_auth_mode(config)
+            aws_auth.validate_auth_config(config)
 
     def test_rejects_incomplete_role_config(self):
         config = {

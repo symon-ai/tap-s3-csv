@@ -16,51 +16,62 @@ class AwsAuthMode(Enum):
     ACCESS_KEY = 'access_key'
 
 
-def detect_auth_mode(config):
-    """Detect AWS auth mode from config keys. Mutually exclusive role vs access key."""
-    role_keys_present = [
-        config.get(key) not in (None, '') for key in ROLE_CONFIG_KEYS
-    ]
-    access_key_keys_present = {
-        key: config.get(key) not in (None, '') for key in ACCESS_KEY_CONFIG_KEYS
+def _configured_keys(config, keys):
+    return {
+        key for key in keys
+        if config.get(key) not in (None, '')
     }
 
-    has_any_role_key = any(role_keys_present)
-    has_any_access_key_key = any(access_key_keys_present.values())
-    has_role_config = any(key in config for key in ROLE_CONFIG_KEYS)
-    has_access_key_config = any(
-        key in config for key in ACCESS_KEY_REQUIRED_KEYS
-    )
 
-    if has_any_role_key and has_any_access_key_key:
+def _missing_keys(config, required_keys):
+    return [
+        key for key in required_keys
+        if config.get(key) in (None, '')
+    ]
+
+
+def _validate_required_keys(config, required_keys, auth_label):
+    missing_keys = _missing_keys(config, required_keys)
+    if missing_keys:
+        raise ValueError(
+            f'Incomplete {auth_label} config. Missing required keys: '
+            f'{", ".join(missing_keys)}'
+        )
+
+
+def validate_auth_config(config):
+    role_keys = _configured_keys(config, ROLE_CONFIG_KEYS)
+    access_key_keys = _configured_keys(config, ACCESS_KEY_CONFIG_KEYS)
+
+    if role_keys and access_key_keys:
         raise ValueError(
             'AWS authentication config must use either role assumption '
             '(account_id, role_name, external_id) or access key credentials '
             '(aws_access_key_id, aws_secret_access_key), not both.'
         )
 
-    if has_any_role_key or (has_role_config and not has_any_access_key_key):
-        if not all(role_keys_present):
-            missing_keys = [
-                key for key, present in zip(ROLE_CONFIG_KEYS, role_keys_present)
-                if not present
-            ]
-            raise ValueError(
-                'Incomplete role assumption config. Missing required keys: '
-                f'{", ".join(missing_keys)}'
-            )
+    if role_keys:
+        required_keys, auth_label = ROLE_CONFIG_KEYS, 'role assumption'
+    elif access_key_keys:
+        required_keys, auth_label = ACCESS_KEY_REQUIRED_KEYS, 'access key'
+    elif any(key in config for key in ROLE_CONFIG_KEYS):
+        required_keys, auth_label = ROLE_CONFIG_KEYS, 'role assumption'
+    elif any(key in config for key in ACCESS_KEY_REQUIRED_KEYS):
+        required_keys, auth_label = ACCESS_KEY_REQUIRED_KEYS, 'access key'
+    else:
+        return
+
+    _validate_required_keys(config, required_keys, auth_label)
+
+
+def detect_auth_mode(config):
+    """Validate config and detect the selected AWS authentication mode."""
+    validate_auth_config(config)
+
+    if _configured_keys(config, ROLE_CONFIG_KEYS):
         return AwsAuthMode.ROLE
 
-    if has_any_access_key_key or has_access_key_config:
-        missing_keys = [
-            key for key in ACCESS_KEY_REQUIRED_KEYS
-            if not access_key_keys_present[key]
-        ]
-        if missing_keys:
-            raise ValueError(
-                'Incomplete access key config. Missing required keys: '
-                f'{", ".join(missing_keys)}'
-            )
+    if _configured_keys(config, ACCESS_KEY_REQUIRED_KEYS):
         return AwsAuthMode.ACCESS_KEY
 
     return AwsAuthMode.DEFAULT
