@@ -28,7 +28,9 @@ def detect_auth_mode(config):
     has_any_role_key = any(role_keys_present)
     has_any_access_key_key = any(access_key_keys_present.values())
     has_role_config = any(key in config for key in ROLE_CONFIG_KEYS)
-    has_access_key_config = any(key in config for key in ACCESS_KEY_CONFIG_KEYS)
+    has_access_key_config = any(
+        key in config for key in ACCESS_KEY_REQUIRED_KEYS
+    )
 
     if has_any_role_key and has_any_access_key_key:
         raise ValueError(

@@ -88,6 +88,13 @@ class TestAwsAuthDetection(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Incomplete access key config'):
             aws_auth.detect_auth_mode(config)
 
+    def test_ignores_empty_optional_session_token(self):
+        config = {
+            'bucket': 'my-bucket',
+            'aws_session_token': '',
+        }
+        self.assertEqual(aws_auth.detect_auth_mode(config), AwsAuthMode.DEFAULT)
+
     def test_treats_empty_strings_as_missing(self):
         config = {
             'bucket': 'my-bucket',
