@@ -250,6 +250,7 @@ def main():
 
         try:
             if auth_mode == AwsAuthMode.ROLE:
+                # If external_id is provided, we are trying to access files in another AWS account, and need to assume the role
                 s3.setup_aws_client(config)
             elif auth_mode == AwsAuthMode.ACCESS_KEY:
                 s3.setup_aws_access_key_client(config)

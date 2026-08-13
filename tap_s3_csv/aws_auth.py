@@ -11,21 +11,18 @@ REQUIRED_CONFIG_KEYS_ACCESS_KEY = ['bucket', *ACCESS_KEY_REQUIRED_KEYS]
 
 
 class AwsAuthMode(Enum):
-    DEFAULT = 'default'
+    DEFAULT = 'default'  # Use ambient worker credentials without assuming a customer role.
     ROLE = 'role'
     ACCESS_KEY = 'access_key'
 
 
-def _is_present(config, key):
-    value = config.get(key)
-    return value is not None and value != ''
-
-
 def detect_auth_mode(config):
     """Detect AWS auth mode from config keys. Mutually exclusive role vs access key."""
-    role_keys_present = [_is_present(config, key) for key in ROLE_CONFIG_KEYS]
+    role_keys_present = [
+        config.get(key) not in (None, '') for key in ROLE_CONFIG_KEYS
+    ]
     access_key_keys_present = {
-        key: _is_present(config, key) for key in ACCESS_KEY_CONFIG_KEYS
+        key: config.get(key) not in (None, '') for key in ACCESS_KEY_CONFIG_KEYS
     }
 
     has_any_role_key = any(role_keys_present)
