@@ -242,7 +242,6 @@ def main():
         if required_config_keys != REQUIRED_CONFIG_KEYS:
             args = singer.utils.parse_args(required_config_keys)
             config = args.config
-            auth_mode = aws_auth.get_auth_mode(config)
 
         uses_customer_credentials = auth_mode != AwsAuthMode.DEFAULT
 
