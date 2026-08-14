@@ -7,19 +7,29 @@ import unittest
 from unittest import mock
 
 import tap_s3_csv
-from tap_s3_csv import dialect, utils
+from tap_s3_csv import dialect, s3, sync, utils
+
+
+def unsafe_gzip_payload():
+    payload = io.BytesIO()
+    with gzip.GzipFile(filename='safe.csv', mode='wb', fileobj=payload) as gz_file:
+        gz_file.write(b'column\nvalue\n')
+    return payload.getvalue().replace(b'safe.csv\x00', b'../escaped.csv\x00', 1)
 
 
 class TestSecurityRemediation(unittest.TestCase):
 
     def test_rejects_path_in_gzip_header_filename(self):
-        payload = io.BytesIO()
-        with gzip.GzipFile(filename='safe.csv', mode='wb', fileobj=payload) as gz_file:
-            gz_file.write(b'column\nvalue\n')
-        unsafe_payload = payload.getvalue().replace(b'safe.csv\x00', b'../escaped.csv\x00', 1)
-
         with self.assertRaisesRegex(ValueError, 'unsafe file name'):
-            utils.get_file_name_from_gzfile(fileobj=io.BytesIO(unsafe_payload))
+            utils.get_file_name_from_gzfile(fileobj=io.BytesIO(unsafe_gzip_payload()))
+
+    def test_sampling_rejects_path_in_gzip_header_filename(self):
+        with self.assertRaisesRegex(ValueError, 'unsafe file name'):
+            s3.sampling_gz_file({}, 'unsafe.gz', io.BytesIO(unsafe_gzip_payload()), 5)
+
+    def test_sync_rejects_path_in_gzip_header_filename(self):
+        with self.assertRaisesRegex(ValueError, 'unsafe file name'):
+            sync.sync_gz_file({}, 'unsafe.gz', {}, {}, io.BytesIO(unsafe_gzip_payload()))
 
     def test_writes_actual_app_relative_error_path_under_root(self):
         with tempfile.TemporaryDirectory() as trusted_root:
