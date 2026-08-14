@@ -21,38 +21,71 @@ class TestSecurityRemediation(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unsafe file name'):
             utils.get_file_name_from_gzfile(fileobj=io.BytesIO(unsafe_payload))
 
-    def test_writes_to_absolute_working_directory_error_path(self):
-        with tempfile.TemporaryDirectory() as temp_working_dir:
-            error_path = os.path.join(temp_working_dir, tap_s3_csv.ERROR_FILE_NAME)
-            tap_s3_csv._write_error_file(error_path, {'message': 'failed'})
+    def test_writes_actual_app_relative_error_path_under_root(self):
+        with tempfile.TemporaryDirectory() as trusted_root:
+            relative_dir = os.path.join('export', 'org', 'task')
+            os.makedirs(os.path.join(trusted_root, relative_dir))
+            relative_path = os.path.join(relative_dir, tap_s3_csv.ERROR_FILE_NAME)
+
+            tap_s3_csv._write_error_file(
+                relative_path, trusted_root, {'message': 'failed'})
+
+            with open(os.path.join(trusted_root, relative_path), encoding='utf-8') as error_file:
+                self.assertEqual({'message': 'failed'}, json.load(error_file))
+
+    def test_writes_absolute_error_path_under_root(self):
+        with tempfile.TemporaryDirectory() as trusted_root:
+            error_path = os.path.join(trusted_root, tap_s3_csv.ERROR_FILE_NAME)
+            tap_s3_csv._write_error_file(
+                error_path, trusted_root, {'message': 'failed'})
             with open(error_path, encoding='utf-8') as error_file:
                 self.assertEqual({'message': 'failed'}, json.load(error_file))
 
+    def test_rejects_outside_sibling_error_path(self):
+        with tempfile.TemporaryDirectory() as temp_directory:
+            trusted_root = os.path.join(temp_directory, 'trusted')
+            outside_dir = os.path.join(temp_directory, 'outside')
+            os.mkdir(trusted_root)
+            os.mkdir(outside_dir)
+            outside_path = os.path.join(outside_dir, tap_s3_csv.ERROR_FILE_NAME)
+
+            with self.assertRaisesRegex(ValueError, 'Invalid error_file_path'):
+                tap_s3_csv._write_error_file(outside_path, trusted_root, {})
+            self.assertFalse(os.path.exists(outside_path))
+
     def test_rejects_error_path_traversal(self):
         with tempfile.TemporaryDirectory() as temp_directory:
-            temp_working_dir = os.path.join(temp_directory, 'working')
-            os.mkdir(temp_working_dir)
+            trusted_root = os.path.join(temp_directory, 'trusted')
+            os.mkdir(trusted_root)
             outside_path = os.path.join(temp_directory, tap_s3_csv.ERROR_FILE_NAME)
-            traversal_path = os.path.join(
-                temp_working_dir, '..', tap_s3_csv.ERROR_FILE_NAME)
+            traversal_path = os.path.join('working', '..', '..', tap_s3_csv.ERROR_FILE_NAME)
             with self.assertRaisesRegex(ValueError, 'Invalid error_file_path'):
-                tap_s3_csv._write_error_file(traversal_path, {})
+                tap_s3_csv._write_error_file(traversal_path, trusted_root, {})
             self.assertFalse(os.path.exists(outside_path))
 
     def test_rejects_error_path_symlink_escape(self):
         with tempfile.TemporaryDirectory() as temp_directory:
-            temp_working_dir = os.path.join(temp_directory, 'working')
+            trusted_root = os.path.join(temp_directory, 'trusted')
             outside_dir = os.path.join(temp_directory, 'outside')
-            os.mkdir(temp_working_dir)
+            os.mkdir(trusted_root)
             os.mkdir(outside_dir)
-            symlink_dir = os.path.join(temp_working_dir, 'linked')
+            symlink_dir = os.path.join(trusted_root, 'linked')
             os.symlink(outside_dir, symlink_dir)
             outside_path = os.path.join(outside_dir, tap_s3_csv.ERROR_FILE_NAME)
 
             with self.assertRaisesRegex(ValueError, 'Invalid error_file_path'):
                 tap_s3_csv._write_error_file(
-                    os.path.join(symlink_dir, tap_s3_csv.ERROR_FILE_NAME), {})
+                    os.path.join('linked', tap_s3_csv.ERROR_FILE_NAME), trusted_root, {})
             self.assertFalse(os.path.exists(outside_path))
+
+    @mock.patch('tap_s3_csv.LOGGER.warning')
+    def test_logs_failed_error_file_write(self, warning):
+        with tempfile.TemporaryDirectory() as trusted_root:
+            tap_s3_csv._try_write_error_file(
+                os.path.join('..', tap_s3_csv.ERROR_FILE_NAME), trusted_root, {})
+
+        warning.assert_called_once()
+        self.assertIn('Failed to write tap error file', warning.call_args.args[0])
 
     @mock.patch('tap_s3_csv.dialect.chardet.UniversalDetector')
     @mock.patch('tap_s3_csv.dialect.preprocess.PreprocessStream')

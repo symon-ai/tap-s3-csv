@@ -29,22 +29,28 @@ ERROR_END_MARKER = '[tap_error_end]'
 ERROR_FILE_NAME = 'tapError.json'
 
 
-def _write_error_file(error_file_path, error_info):
-    """Write errors only to an absolute app-controlled tap error path."""
+def _write_error_file(error_file_path, error_file_root, error_info):
+    """Write errors only beneath the app-controlled error file root."""
     path_parts = error_file_path.split(os.sep)
-    if (not os.path.isabs(error_file_path) or '..' in path_parts or
-            os.path.basename(error_file_path) != ERROR_FILE_NAME):
+    if ('..' in path_parts or os.path.basename(error_file_path) != ERROR_FILE_NAME):
         raise ValueError('Invalid error_file_path')
 
-    working_dir = os.path.dirname(error_file_path)
-    canonical_working_dir = os.path.realpath(working_dir)
-    canonical_error_path = os.path.realpath(error_file_path)
-    if (os.path.abspath(working_dir) != canonical_working_dir or
-            os.path.commonpath((canonical_working_dir, canonical_error_path)) != canonical_working_dir):
+    canonical_root = os.path.realpath(error_file_root)
+    candidate_path = (error_file_path if os.path.isabs(error_file_path)
+                      else os.path.join(canonical_root, error_file_path))
+    canonical_error_path = os.path.realpath(candidate_path)
+    if os.path.commonpath((canonical_root, canonical_error_path)) != canonical_root:
         raise ValueError('Invalid error_file_path')
 
     with open(canonical_error_path, 'w', encoding='utf-8') as fp:
         json.dump(error_info, fp)
+
+
+def _try_write_error_file(error_file_path, error_file_root, error_info):
+    try:
+        _write_error_file(error_file_path, error_file_root, error_info)
+    except (OSError, ValueError) as error_file_exception:
+        LOGGER.warning('Failed to write tap error file: %s', error_file_exception)
 
 
 def _count_singer_col_types(schema: dict) -> tuple:
@@ -311,10 +317,11 @@ def main():
             try:
                 error_file_path = args.config.get('error_file_path', None)
                 if error_file_path is not None:
-                    try:
-                        _write_error_file(error_file_path, error_info)
-                    except (OSError, ValueError) as error_file_exception:
-                        LOGGER.warning('Failed to write tap error file: %s', error_file_exception)
+                    error_file_root = args.config.get('error_file_root')
+                    if error_file_root is None:
+                        LOGGER.warning('Failed to write tap error file: missing error_file_root')
+                    else:
+                        _try_write_error_file(error_file_path, error_file_root, error_info)
                 # log error info as well in case file is corrupted
                 error_info_json = json.dumps(error_info)
                 error_start_marker = args.config.get('error_start_marker', ERROR_START_MARKER)
