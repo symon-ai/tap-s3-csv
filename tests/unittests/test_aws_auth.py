@@ -62,7 +62,7 @@ class TestAwsAuthDetection(unittest.TestCase):
             'aws_session_token': 'token',
         }
         with self.assertRaisesRegex(ValueError, 'not both'):
-            aws_auth.validate_auth_config(config)
+            aws_auth.detect_auth_mode(config)
 
     def test_rejects_incomplete_role_config(self):
         config = {
@@ -113,11 +113,6 @@ class TestAwsAuthDetection(unittest.TestCase):
         }
         with self.assertRaisesRegex(ValueError, 'Incomplete role assumption config'):
             aws_auth.detect_auth_mode(config)
-
-    def test_is_external_auth(self):
-        self.assertFalse(aws_auth.is_external_auth(AwsAuthMode.DEFAULT))
-        self.assertTrue(aws_auth.is_external_auth(AwsAuthMode.ROLE))
-        self.assertTrue(aws_auth.is_external_auth(AwsAuthMode.ACCESS_KEY))
 
     def test_get_required_config_keys(self):
         self.assertEqual(

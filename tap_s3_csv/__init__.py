@@ -18,7 +18,7 @@ from tap_s3_csv.symon_exception import SymonException
 
 LOGGER = singer.get_logger()
 
-REQUIRED_CONFIG_KEYS = aws_auth.REQUIRED_CONFIG_KEYS_DEFAULT
+REQUIRED_CONFIG_KEYS = aws_auth.get_required_config_keys(AwsAuthMode.DEFAULT)
 
 IMPORT_PERF_METRICS_LOG_PREFIX = "IMPORT_PERF_METRICS:"
 
@@ -244,7 +244,7 @@ def main():
             config = args.config
             auth_mode = aws_auth.detect_auth_mode(config)
 
-        external_source = aws_auth.is_external_auth(auth_mode)
+        uses_customer_credentials = auth_mode != AwsAuthMode.DEFAULT
 
         config['tables'] = validate_table_config(config)
 
@@ -269,7 +269,7 @@ def main():
             elif args.properties:
                 do_sync(config, args.properties, args.state)
         except ClientError as e:
-            if not external_source:
+            if not uses_customer_credentials:
                 raise
             raise s3.build_symon_exception_from_client_error(e, config.get('bucket')) from e
     except SymonException as e:

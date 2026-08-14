@@ -104,7 +104,6 @@ class InMemoryCache:
             return deepcopy(self._cache[key])
         return default
 
-@retry_pattern()
 def setup_aws_access_key_client(config):
     session_kwargs = {
         'aws_access_key_id': config['aws_access_key_id'],
