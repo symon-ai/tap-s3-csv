@@ -12,8 +12,7 @@ class AwsAuthMode(Enum):
     ACCESS_KEY = 'access_key'
 
 
-def detect_auth_mode(config):
-    """Validate config and detect the selected AWS authentication mode."""
+def validate_auth_config(config):
     role_has_values = any(
         config.get(key) not in (None, '')
         for key in ROLE_REQUIRED_CONFIG_KEYS
@@ -34,36 +33,46 @@ def detect_auth_mode(config):
         )
 
     if role_has_values:
-        auth_mode = AwsAuthMode.ROLE
         required_keys = ROLE_REQUIRED_CONFIG_KEYS
+        auth_label = 'role assumption'
     elif access_key_has_values:
-        auth_mode = AwsAuthMode.ACCESS_KEY
         required_keys = ACCESS_KEY_REQUIRED_CONFIG_KEYS
+        auth_label = 'access key'
     elif any(key in config for key in ROLE_REQUIRED_CONFIG_KEYS):
-        auth_mode = AwsAuthMode.ROLE
         required_keys = ROLE_REQUIRED_CONFIG_KEYS
+        auth_label = 'role assumption'
     elif any(key in config for key in ACCESS_KEY_REQUIRED_CONFIG_KEYS):
-        auth_mode = AwsAuthMode.ACCESS_KEY
         required_keys = ACCESS_KEY_REQUIRED_CONFIG_KEYS
+        auth_label = 'access key'
     else:
-        return AwsAuthMode.DEFAULT
+        return
 
     missing_keys = [
         key for key in required_keys
         if config.get(key) in (None, '')
     ]
     if missing_keys:
-        auth_label = (
-            'role assumption'
-            if auth_mode == AwsAuthMode.ROLE
-            else 'access key'
-        )
         raise ValueError(
             f'Incomplete {auth_label} config. '
             f'Missing required keys: {", ".join(missing_keys)}'
         )
 
-    return auth_mode
+
+def get_auth_mode(config):
+    """Validate config and return the selected AWS authentication mode."""
+    validate_auth_config(config)
+
+    if any(
+        config.get(key) not in (None, '')
+        for key in ROLE_REQUIRED_CONFIG_KEYS
+    ):
+        return AwsAuthMode.ROLE
+    if any(
+        config.get(key) not in (None, '')
+        for key in ACCESS_KEY_REQUIRED_CONFIG_KEYS
+    ):
+        return AwsAuthMode.ACCESS_KEY
+    return AwsAuthMode.DEFAULT
 
 
 def get_required_config_keys(auth_mode):

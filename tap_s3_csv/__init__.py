@@ -237,12 +237,12 @@ def main():
         args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS)
         config = args.config
 
-        auth_mode = aws_auth.detect_auth_mode(config)
+        auth_mode = aws_auth.get_auth_mode(config)
         required_config_keys = aws_auth.get_required_config_keys(auth_mode)
         if required_config_keys != REQUIRED_CONFIG_KEYS:
             args = singer.utils.parse_args(required_config_keys)
             config = args.config
-            auth_mode = aws_auth.detect_auth_mode(config)
+            auth_mode = aws_auth.get_auth_mode(config)
 
         uses_customer_credentials = auth_mode != AwsAuthMode.DEFAULT
 
@@ -250,8 +250,7 @@ def main():
 
         try:
             if auth_mode == AwsAuthMode.ROLE:
-                # If external_id is provided, we are trying to access files in another AWS account, and need to assume the role
-                s3.setup_aws_client(config)
+                s3.setup_aws_role_client(config)
             elif auth_mode == AwsAuthMode.ACCESS_KEY:
                 s3.setup_aws_access_key_client(config)
             # Otherwise, confirm that we can access the bucket in our own AWS account
