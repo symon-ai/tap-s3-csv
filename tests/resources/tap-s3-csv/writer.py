@@ -1,8 +1,10 @@
 import csv
 import itertools
 import sys
-import random
+from secrets import SystemRandom
 import datetime
+
+random = SystemRandom()
 
 MAX_POS_DOUBLE = 1.7976931348623157E+308
 MAX_POS_FLOAT = 3.402823466E+38

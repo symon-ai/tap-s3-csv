@@ -1,5 +1,4 @@
 import re
-import random
 import csv
 
 import singer
@@ -104,17 +103,15 @@ def detect_dialect(config, s3_file, table):
             break
 
     if detect_encoding:
-        # finish preparing interesting lines - pad with non-interesting lines, keep original file order
-        random.seed(0)
-        remainder = min(MAX_CHARDET_LINES - len(interesting), lines_read - 1)
+        # Finish preparing interesting lines with deterministic, evenly spaced
+        # samples. No entropy is needed because this is not a security decision.
+        remainder = min(MAX_CHARDET_LINES - len(interesting), max(lines_read - 1, 0))
+        if remainder:
+            step = max((lines_read - 1) // remainder, 1)
+            interesting.extend(range(1, lines_read, step))
 
-        for _ in range(remainder):
-            i = random.randint(1, lines_read - 1)
-            interesting.append(i)
-        interesting.sort()
-
-        # get rid of repeating lines that may skew detector
-        interesting = list(set(interesting))
+        # Keep original file order and remove repeats that may skew the detector.
+        interesting = sorted(set(interesting))[:MAX_CHARDET_LINES]
 
         # feed selected lines to universal detector
         detector = chardet.UniversalDetector()

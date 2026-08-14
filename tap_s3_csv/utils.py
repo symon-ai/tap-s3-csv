@@ -1,5 +1,16 @@
 import gzip
 import struct
+from pathlib import PurePosixPath, PureWindowsPath
+
+
+def validate_gzip_file_name(file_name):
+    """Return a safe RFC 1952 FNAME value without path components."""
+    if (not file_name or '\x00' in file_name or
+            PurePosixPath(file_name).name != file_name or
+            PureWindowsPath(file_name).name != file_name or
+            file_name in ('.', '..')):
+        raise ValueError('Gzip header contains an unsafe file name')
+    return file_name
 
 
 def get_file_name_from_gzfile(filename=None, fileobj=None):
@@ -23,7 +34,7 @@ def get_file_name_from_gzfile(filename=None, fileobj=None):
     if not flag & gzip.FNAME:
         # Not stored in the header, use the filename sans .gz
         fname = _fp.name
-        return fname[:-3] if fname.endswith('.gzip') else fname
+        return validate_gzip_file_name(fname[:-3] if fname.endswith('.gzip') else fname)
 
     if flag & gzip.FEXTRA:
         # Read & discard the extra field, if present
@@ -40,7 +51,7 @@ def get_file_name_from_gzfile(filename=None, fileobj=None):
             if not s or s == b'\000':
                 break
             _fname.append(s)
-        return ''.join([s.decode('latin1') for s in _fname])
+        return validate_gzip_file_name(''.join([s.decode('latin1') for s in _fname]))
 
     return None
 

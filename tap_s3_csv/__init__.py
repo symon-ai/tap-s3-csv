@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import singer
 import time
@@ -25,6 +26,17 @@ IMPORT_PERF_METRICS_LOG_PREFIX = "IMPORT_PERF_METRICS:"
 # for symon error logging
 ERROR_START_MARKER = '[tap_error_start]'
 ERROR_END_MARKER = '[tap_error_end]'
+ERROR_FILE_NAME = 'tapError.json'
+
+
+def _write_error_file(error_file_path, error_info):
+    """Write errors only to a relative app-controlled tap error path."""
+    normalized_path = os.path.normpath(error_file_path)
+    if (os.path.isabs(error_file_path) or normalized_path.startswith('..' + os.sep) or
+            os.path.basename(normalized_path) != ERROR_FILE_NAME):
+        raise ValueError('Invalid error_file_path')
+    with open(normalized_path, 'w', encoding='utf-8') as fp:
+        json.dump(error_info, fp)
 
 
 def _count_singer_col_types(schema: dict) -> tuple:
@@ -292,8 +304,7 @@ def main():
                 error_file_path = args.config.get('error_file_path', None)
                 if error_file_path is not None:
                     try:
-                        with open(error_file_path, 'w', encoding='utf-8') as fp:
-                            json.dump(error_info, fp)
+                        _write_error_file(error_file_path, error_info)
                     except:
                         pass
                 # log error info as well in case file is corrupted
