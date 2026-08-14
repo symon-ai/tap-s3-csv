@@ -30,12 +30,20 @@ ERROR_FILE_NAME = 'tapError.json'
 
 
 def _write_error_file(error_file_path, error_info):
-    """Write errors only to a relative app-controlled tap error path."""
-    normalized_path = os.path.normpath(error_file_path)
-    if (os.path.isabs(error_file_path) or normalized_path.startswith('..' + os.sep) or
-            os.path.basename(normalized_path) != ERROR_FILE_NAME):
+    """Write errors only to an absolute app-controlled tap error path."""
+    path_parts = error_file_path.split(os.sep)
+    if (not os.path.isabs(error_file_path) or '..' in path_parts or
+            os.path.basename(error_file_path) != ERROR_FILE_NAME):
         raise ValueError('Invalid error_file_path')
-    with open(normalized_path, 'w', encoding='utf-8') as fp:
+
+    working_dir = os.path.dirname(error_file_path)
+    canonical_working_dir = os.path.realpath(working_dir)
+    canonical_error_path = os.path.realpath(error_file_path)
+    if (os.path.abspath(working_dir) != canonical_working_dir or
+            os.path.commonpath((canonical_working_dir, canonical_error_path)) != canonical_working_dir):
+        raise ValueError('Invalid error_file_path')
+
+    with open(canonical_error_path, 'w', encoding='utf-8') as fp:
         json.dump(error_info, fp)
 
 
@@ -305,8 +313,8 @@ def main():
                 if error_file_path is not None:
                     try:
                         _write_error_file(error_file_path, error_info)
-                    except:
-                        pass
+                    except (OSError, ValueError) as error_file_exception:
+                        LOGGER.warning('Failed to write tap error file: %s', error_file_exception)
                 # log error info as well in case file is corrupted
                 error_info_json = json.dumps(error_info)
                 error_start_marker = args.config.get('error_start_marker', ERROR_START_MARKER)

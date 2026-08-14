@@ -21,17 +21,38 @@ class TestSecurityRemediation(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unsafe file name'):
             utils.get_file_name_from_gzfile(fileobj=io.BytesIO(unsafe_payload))
 
-    def test_writes_only_to_expected_error_filename(self):
-        with tempfile.TemporaryDirectory(dir='.') as directory:
-            error_path = os.path.relpath(os.path.join(directory, tap_s3_csv.ERROR_FILE_NAME))
+    def test_writes_to_absolute_working_directory_error_path(self):
+        with tempfile.TemporaryDirectory() as temp_working_dir:
+            error_path = os.path.join(temp_working_dir, tap_s3_csv.ERROR_FILE_NAME)
             tap_s3_csv._write_error_file(error_path, {'message': 'failed'})
             with open(error_path, encoding='utf-8') as error_file:
                 self.assertEqual({'message': 'failed'}, json.load(error_file))
 
+    def test_rejects_error_path_traversal(self):
+        with tempfile.TemporaryDirectory() as temp_directory:
+            temp_working_dir = os.path.join(temp_directory, 'working')
+            os.mkdir(temp_working_dir)
+            outside_path = os.path.join(temp_directory, tap_s3_csv.ERROR_FILE_NAME)
+            traversal_path = os.path.join(
+                temp_working_dir, '..', tap_s3_csv.ERROR_FILE_NAME)
             with self.assertRaisesRegex(ValueError, 'Invalid error_file_path'):
-                tap_s3_csv._write_error_file(os.path.join(directory, 'arbitrary.json'), {})
+                tap_s3_csv._write_error_file(traversal_path, {})
+            self.assertFalse(os.path.exists(outside_path))
+
+    def test_rejects_error_path_symlink_escape(self):
+        with tempfile.TemporaryDirectory() as temp_directory:
+            temp_working_dir = os.path.join(temp_directory, 'working')
+            outside_dir = os.path.join(temp_directory, 'outside')
+            os.mkdir(temp_working_dir)
+            os.mkdir(outside_dir)
+            symlink_dir = os.path.join(temp_working_dir, 'linked')
+            os.symlink(outside_dir, symlink_dir)
+            outside_path = os.path.join(outside_dir, tap_s3_csv.ERROR_FILE_NAME)
+
             with self.assertRaisesRegex(ValueError, 'Invalid error_file_path'):
-                tap_s3_csv._write_error_file('/tmp/tapError.json', {})
+                tap_s3_csv._write_error_file(
+                    os.path.join(symlink_dir, tap_s3_csv.ERROR_FILE_NAME), {})
+            self.assertFalse(os.path.exists(outside_path))
 
     @mock.patch('tap_s3_csv.dialect.chardet.UniversalDetector')
     @mock.patch('tap_s3_csv.dialect.preprocess.PreprocessStream')
