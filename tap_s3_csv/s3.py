@@ -104,8 +104,20 @@ class InMemoryCache:
             return deepcopy(self._cache[key])
         return default
 
+def setup_aws_access_key_client(config):
+    session_kwargs = {
+        'aws_access_key_id': config['aws_access_key_id'],
+        'aws_secret_access_key': config['aws_secret_access_key'],
+    }
+    if config.get('aws_session_token'):
+        session_kwargs['aws_session_token'] = config['aws_session_token']
+
+    LOGGER.info('Configuring AWS session using access key credentials')
+    boto3.setup_default_session(**session_kwargs)
+
+
 @retry_pattern()
-def setup_aws_client(config):
+def setup_aws_role_client(config):
     role_arn = "arn:aws:iam::{}:role/{}".format(config['account_id'].replace('-', ''),
                                                 config['role_name'])
     session = Session()
