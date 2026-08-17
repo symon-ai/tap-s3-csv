@@ -248,10 +248,11 @@ def main():
         config['tables'] = validate_table_config(config)
 
         try:
-            if auth_mode == AwsAuthMode.ROLE:
-                s3.setup_aws_role_client(config)
-            elif auth_mode == AwsAuthMode.ACCESS_KEY:
-                s3.setup_aws_access_key_client(config)
+            if uses_customer_credentials:
+                if auth_mode == AwsAuthMode.ACCESS_KEY:
+                    s3.setup_aws_access_key_client(config)
+                else:
+                    s3.setup_aws_role_client(config)
             # Otherwise, confirm that we can access the bucket in our own AWS account
             else:
                 try:
