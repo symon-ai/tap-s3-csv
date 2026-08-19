@@ -12,13 +12,13 @@ from tap_s3_csv import s3
 from tap_s3_csv.sync import sync_stream
 from tap_s3_csv.config import CONFIG_CONTRACT
 from tap_s3_csv import dialect
+from tap_s3_csv import aws_auth
+from tap_s3_csv.aws_auth import AwsAuthMode
 from tap_s3_csv.symon_exception import SymonException
 
 LOGGER = singer.get_logger()
 
-REQUIRED_CONFIG_KEYS = ["bucket"]
-REQUIRED_CONFIG_KEYS_EXTERNAL_SOURCE = [
-    "bucket", "account_id", "external_id", "role_name"]
+REQUIRED_CONFIG_KEYS = aws_auth.get_required_config_keys(AwsAuthMode.DEFAULT)
 
 IMPORT_PERF_METRICS_LOG_PREFIX = "IMPORT_PERF_METRICS:"
 
@@ -237,19 +237,22 @@ def main():
         args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS)
         config = args.config
 
-        external_source = False
-
-        if 'external_id' in config:
-            args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS_EXTERNAL_SOURCE)
+        auth_mode = aws_auth.get_auth_mode(config)
+        required_config_keys = aws_auth.get_required_config_keys(auth_mode)
+        if required_config_keys != REQUIRED_CONFIG_KEYS:
+            args = singer.utils.parse_args(required_config_keys)
             config = args.config
-            external_source = True
+
+        uses_customer_credentials = auth_mode != AwsAuthMode.DEFAULT
 
         config['tables'] = validate_table_config(config)
 
         try:
-            # If external_id is provided, we are trying to access files in another AWS account, and need to assume the role
-            if external_source:
-                s3.setup_aws_client(config)
+            if uses_customer_credentials:
+                if auth_mode == AwsAuthMode.ACCESS_KEY:
+                    s3.setup_aws_access_key_client(config)
+                else:
+                    s3.setup_aws_role_client(config)
             # Otherwise, confirm that we can access the bucket in our own AWS account
             else:
                 try:
@@ -265,7 +268,7 @@ def main():
             elif args.properties:
                 do_sync(config, args.properties, args.state)
         except ClientError as e:
-            if not external_source:
+            if not uses_customer_credentials:
                 raise
             raise s3.build_symon_exception_from_client_error(e, config.get('bucket')) from e
     except SymonException as e:

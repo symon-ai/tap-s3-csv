@@ -118,6 +118,32 @@ A sample configuration is available inside [config.sample.json](config.sample.js
 - **external_id**: The external_id defined in the role to help authorize your AWS account when connecting to the external AWS account
 - **recursive_search**: true/false/undefined
 
+Role assumption and access key authentication are mutually exclusive. Do not include both sets of credentials in the same config.
+
+### Configuration when authenticating with AWS access keys
+
+```
+{
+    "bucket": "bucket-name",
+    "aws_access_key_id": "AKIA...",
+    "aws_secret_access_key": "your-secret-access-key",
+    "aws_session_token": "optional-session-token-for-temporary-credentials",
+    "tables": "[
+        {
+            "search_prefix": "exports",
+            "search_pattern": "my_table\/.*\.csv",
+            "table_name": "my_table",
+            "key_properties": "id",
+            "delimiter": ","
+        }
+    ]"
+}
+```
+
+- **aws_access_key_id**: The AWS access key ID for the customer S3 bucket
+- **aws_secret_access_key**: The AWS secret access key for the customer S3 bucket
+- **aws_session_token**: Optional session token when using temporary credentials
+
 A note about `recursive_search` property: By default (with `recursive_search` undefined or set to true), the tap will select files in your S3 bucket whose file names match the `search_pattern` regex in the folder you specify with `search_prefix`, and any subfolders within the folder. If multiple files are found in the folder structure that match the `search_pattern`, the content of all of the files will be combined. For discovery, this means all columns from all files will be present in the catalog that gets produced, and for import, it means all columns and all rows from all files will be present in the resulting output (for files that don’t include columns that are present in other selected files, the corresponding cells for those rows will just be blank). This behaviour could potentially be beneficial if you have multiple files with the same schema, and you would like the tap to just combine the rows. However, it could also lead to undesired results if multiple files within the same folder structure just happen to match the same `search_pattern`, but aren’t intended to be related. To limit the search to exactly folder specified with `search_prefix`, set `recursive_search` to false.
 
 ---
