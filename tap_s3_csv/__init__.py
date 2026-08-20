@@ -17,9 +17,9 @@ from tap_s3_csv.symon_exception import SymonException
 LOGGER = singer.get_logger()
 
 REQUIRED_CONFIG_KEYS = ["bucket"]
-REQUIRED_CONFIG_KEYS_EXTERNAL_SOURCE = [
+ROLE_REQUIRED_CONFIG_KEYS = [
     "bucket", "account_id", "external_id", "role_name"]
-REQUIRED_CONFIG_KEYS_ACCESS_KEY = [
+ACCESS_KEY_REQUIRED_CONFIG_KEYS = [
     "bucket", "aws_access_key_id", "aws_secret_access_key"]
 
 IMPORT_PERF_METRICS_LOG_PREFIX = "IMPORT_PERF_METRICS:"
@@ -243,11 +243,11 @@ def main():
         auth_method = config.get('auth_method')
 
         if auth_method == 'awsAccessKey':
-            args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS_ACCESS_KEY)
+            args = singer.utils.parse_args(ACCESS_KEY_REQUIRED_CONFIG_KEYS)
             config = args.config
             external_source = True
         elif auth_method == 'awsRoleAssumption' or 'external_id' in config:
-            args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS_EXTERNAL_SOURCE)
+            args = singer.utils.parse_args(ROLE_REQUIRED_CONFIG_KEYS)
             config = args.config
             external_source = True
 
