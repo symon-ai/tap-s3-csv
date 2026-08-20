@@ -21,12 +21,21 @@ ROLE_REQUIRED_CONFIG_KEYS = [
     "bucket", "account_id", "external_id", "role_name"]
 ACCESS_KEY_REQUIRED_CONFIG_KEYS = [
     "bucket", "aws_access_key_id", "aws_secret_access_key"]
+AUTH_METHOD_ROLE = 'awsRoleAssumption'
+AUTH_METHOD_ACCESS_KEY = 'awsAccessKey'
 
 IMPORT_PERF_METRICS_LOG_PREFIX = "IMPORT_PERF_METRICS:"
 
 # for symon error logging
 ERROR_START_MARKER = '[tap_error_start]'
 ERROR_END_MARKER = '[tap_error_end]'
+
+
+def _resolve_auth_method(config):
+    auth_method = config.get('auth_method')
+    if auth_method is not None:
+        return auth_method
+    return AUTH_METHOD_ROLE if 'external_id' in config else None
 
 
 def _count_singer_col_types(schema: dict) -> tuple:
@@ -240,13 +249,13 @@ def main():
         config = args.config
 
         external_source = False
-        auth_method = config.get('auth_method')
+        auth_method = _resolve_auth_method(config)
 
-        if auth_method == 'awsAccessKey':
+        if auth_method == AUTH_METHOD_ACCESS_KEY:
             args = singer.utils.parse_args(ACCESS_KEY_REQUIRED_CONFIG_KEYS)
             config = args.config
             external_source = True
-        elif auth_method == 'awsRoleAssumption' or 'external_id' in config:
+        elif auth_method == AUTH_METHOD_ROLE:
             args = singer.utils.parse_args(ROLE_REQUIRED_CONFIG_KEYS)
             config = args.config
             external_source = True
@@ -254,9 +263,8 @@ def main():
         config['tables'] = validate_table_config(config)
 
         try:
-            # If external_id is provided, we are trying to access files in another AWS account, and need to assume the role
             if external_source:
-                if auth_method == 'awsAccessKey':
+                if auth_method == AUTH_METHOD_ACCESS_KEY:
                     s3.setup_external_source_with_aws_access_key(config)
                 else:
                     s3.setup_external_source_with_aws_role_assumption(config)
