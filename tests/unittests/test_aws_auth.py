@@ -30,6 +30,31 @@ def _make_parse_args_side_effect(config):
     return parse_args
 
 
+class TestResolveAuthMethod(unittest.TestCase):
+
+    def test_explicit_auth_method_wins(self):
+        config = {
+            'auth_method': 'awsAccessKey',
+            'external_id': 'legacy-external-id',
+        }
+        self.assertEqual(tap_s3_csv._resolve_auth_method(config), 'awsAccessKey')
+
+    def test_legacy_role_when_auth_method_absent_and_external_id_present(self):
+        config = {'external_id': 'legacy-external-id'}
+        self.assertEqual(tap_s3_csv._resolve_auth_method(config), 'awsRoleAssumption')
+
+    def test_no_auth_preserves_internal_behavior(self):
+        config = {'bucket': 'my-bucket'}
+        self.assertIsNone(tap_s3_csv._resolve_auth_method(config))
+
+    def test_access_key_fields_without_auth_method_stay_internal(self):
+        config = {
+            'aws_access_key_id': 'AKIAEXAMPLE',
+            'aws_secret_access_key': 'secret',
+        }
+        self.assertIsNone(tap_s3_csv._resolve_auth_method(config))
+
+
 class TestAuthRouting(unittest.TestCase):
 
     @mock.patch('tap_s3_csv.do_discover')
@@ -210,20 +235,64 @@ class TestSetupAwsClient(unittest.TestCase):
 
 class TestBuildSymonExceptionFromClientError(unittest.TestCase):
 
-    def _client_error(self, code):
+    def _client_error(self, code, message='raw aws message'):
         return ClientError(
-            {'Error': {'Code': code, 'Message': 'denied'}},
+            {'Error': {'Code': code, 'Message': message}},
             'ListObjectsV2',
         )
 
-    def test_maps_access_denied_to_symon_exception(self):
-        error = self._client_error('AccessDenied')
-        result = s3.build_symon_exception_from_client_error(error, 'my-bucket')
+    def _assert_mapped(self, aws_code, singer_code, bucket='my-bucket', aws_message='raw aws message'):
+        error = self._client_error(aws_code, aws_message)
+        result = s3.build_symon_exception_from_client_error(error, bucket)
         self.assertIsInstance(result, SymonException)
-        self.assertEqual(result.code, 'amazonS3.accessDeniedError')
-        self.assertIn('my-bucket', str(result))
+        self.assertEqual(result.code, singer_code)
+        self.assertNotIn(aws_message, str(result))
+        self.assertNotIn(aws_code, str(result))
+
+    def test_maps_expired_token(self):
+        self._assert_mapped('ExpiredToken', 'amazonS3.expiredTokenError')
+
+    def test_maps_invalid_credentials(self):
+        for aws_code in ('InvalidToken', 'InvalidAccessKeyId', 'SignatureDoesNotMatch'):
+            with self.subTest(aws_code=aws_code):
+                self._assert_mapped(aws_code, 'amazonS3.invalidCredentialsError')
+
+    def test_maps_access_denied_variants(self):
+        for aws_code in ('AccessDenied', 'AccessDeniedException', 'KMSAccessDeniedException'):
+            with self.subTest(aws_code=aws_code):
+                error = self._client_error(aws_code)
+                result = s3.build_symon_exception_from_client_error(error, 'my-bucket')
+                self.assertIsInstance(result, SymonException)
+                self.assertEqual(result.code, 'amazonS3.accessDeniedError')
+                self.assertEqual(
+                    str(result),
+                    'Amazon S3 denied access. Ask your AWS administrator to check the S3 or KMS permissions.',
+                )
+
+    def test_maps_bucket_not_found(self):
+        self._assert_mapped('NoSuchBucket', 'amazonS3.bucketNotFoundError')
+
+    def test_maps_incorrect_region(self):
+        for aws_code in (
+            'PermanentRedirect',
+            'AuthorizationHeaderMalformed',
+            'IllegalLocationConstraintException',
+        ):
+            with self.subTest(aws_code=aws_code):
+                self._assert_mapped(aws_code, 'amazonS3.incorrectRegionError')
 
     def test_returns_other_client_errors_unchanged(self):
-        error = self._client_error('NoSuchBucket')
+        error = self._client_error('SlowDown')
         result = s3.build_symon_exception_from_client_error(error, 'my-bucket')
         self.assertIs(result, error)
+
+    @mock.patch('tap_s3_csv.s3.LOGGER')
+    def test_logs_original_aws_error_without_exposing_it(self, mock_logger):
+        error = self._client_error('ExpiredToken', 'The provided token has expired.')
+        s3.build_symon_exception_from_client_error(error, 'my-bucket')
+
+        mock_logger.error.assert_called_once_with(
+            'Amazon S3 ClientError (%s): %s',
+            'ExpiredToken',
+            'The provided token has expired.',
+        )
