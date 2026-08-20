@@ -104,7 +104,7 @@ class InMemoryCache:
             return deepcopy(self._cache[key])
         return default
 
-def setup_aws_access_key_client(config):
+def setup_external_source_with_aws_access_key(config):
     session_kwargs = {
         'aws_access_key_id': config['aws_access_key_id'],
         'aws_secret_access_key': config['aws_secret_access_key'],
@@ -117,7 +117,7 @@ def setup_aws_access_key_client(config):
 
 
 @retry_pattern()
-def setup_aws_client(config):
+def setup_external_source_with_aws_role_assumption(config):
     role_arn = "arn:aws:iam::{}:role/{}".format(config['account_id'].replace('-', ''),
                                                 config['role_name'])
     session = Session()

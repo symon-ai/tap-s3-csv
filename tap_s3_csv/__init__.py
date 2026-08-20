@@ -257,9 +257,9 @@ def main():
             # If external_id is provided, we are trying to access files in another AWS account, and need to assume the role
             if external_source:
                 if auth_method == 'awsAccessKey':
-                    s3.setup_aws_access_key_client(config)
+                    s3.setup_external_source_with_aws_access_key(config)
                 else:
-                    s3.setup_aws_client(config)
+                    s3.setup_external_source_with_aws_role_assumption(config)
             # Otherwise, confirm that we can access the bucket in our own AWS account
             else:
                 try:
