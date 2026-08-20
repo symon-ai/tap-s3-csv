@@ -117,7 +117,7 @@ def setup_aws_access_key_client(config):
 
 
 @retry_pattern()
-def setup_aws_role_client(config):
+def setup_aws_client(config):
     role_arn = "arn:aws:iam::{}:role/{}".format(config['account_id'].replace('-', ''),
                                                 config['role_name'])
     session = Session()

@@ -12,13 +12,15 @@ from tap_s3_csv import s3
 from tap_s3_csv.sync import sync_stream
 from tap_s3_csv.config import CONFIG_CONTRACT
 from tap_s3_csv import dialect
-from tap_s3_csv import aws_auth
-from tap_s3_csv.aws_auth import AwsAuthMode
 from tap_s3_csv.symon_exception import SymonException
 
 LOGGER = singer.get_logger()
 
-REQUIRED_CONFIG_KEYS = aws_auth.get_required_config_keys(AwsAuthMode.DEFAULT)
+REQUIRED_CONFIG_KEYS = ["bucket"]
+REQUIRED_CONFIG_KEYS_EXTERNAL_SOURCE = [
+    "bucket", "account_id", "external_id", "role_name"]
+REQUIRED_CONFIG_KEYS_ACCESS_KEY = [
+    "bucket", "aws_access_key_id", "aws_secret_access_key"]
 
 IMPORT_PERF_METRICS_LOG_PREFIX = "IMPORT_PERF_METRICS:"
 
@@ -237,22 +239,27 @@ def main():
         args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS)
         config = args.config
 
-        auth_mode = aws_auth.get_auth_mode(config)
-        required_config_keys = aws_auth.get_required_config_keys(auth_mode)
-        if required_config_keys != REQUIRED_CONFIG_KEYS:
-            args = singer.utils.parse_args(required_config_keys)
-            config = args.config
+        external_source = False
+        auth_method = config.get('auth_method')
 
-        uses_customer_credentials = auth_mode != AwsAuthMode.DEFAULT
+        if auth_method == 'awsAccessKey':
+            args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS_ACCESS_KEY)
+            config = args.config
+            external_source = True
+        elif auth_method == 'awsRoleAssumption' or 'external_id' in config:
+            args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS_EXTERNAL_SOURCE)
+            config = args.config
+            external_source = True
 
         config['tables'] = validate_table_config(config)
 
         try:
-            if uses_customer_credentials:
-                if auth_mode == AwsAuthMode.ACCESS_KEY:
+            # If external_id is provided, we are trying to access files in another AWS account, and need to assume the role
+            if external_source:
+                if auth_method == 'awsAccessKey':
                     s3.setup_aws_access_key_client(config)
                 else:
-                    s3.setup_aws_role_client(config)
+                    s3.setup_aws_client(config)
             # Otherwise, confirm that we can access the bucket in our own AWS account
             else:
                 try:
@@ -268,7 +275,7 @@ def main():
             elif args.properties:
                 do_sync(config, args.properties, args.state)
         except ClientError as e:
-            if not uses_customer_credentials:
+            if not external_source:
                 raise
             raise s3.build_symon_exception_from_client_error(e, config.get('bucket')) from e
     except SymonException as e:
