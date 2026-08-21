@@ -5,7 +5,6 @@ import time
 import traceback
 import boto3
 
-from botocore.exceptions import ClientError
 from singer import metadata
 from tap_s3_csv.discover import discover_streams
 from tap_s3_csv import s3
@@ -264,6 +263,7 @@ def main():
 
         try:
             if external_source:
+                s3.set_translate_s3_client_errors(True)
                 if auth_method == AUTH_METHOD_ACCESS_KEY:
                     s3.setup_external_source_with_aws_access_key(config)
                 else:
@@ -282,10 +282,9 @@ def main():
                 do_discover(args.config)
             elif args.properties:
                 do_sync(config, args.properties, args.state)
-        except ClientError as e:
-            if not external_source:
-                raise
-            raise s3.build_symon_exception_from_client_error(e, config.get('bucket')) from e
+        finally:
+            if external_source:
+                s3.set_translate_s3_client_errors(False)
     except SymonException as e:
         exc_type, exc_value, exc_traceback = sys.exc_info()
         error_info = {

@@ -29,7 +29,10 @@ from tap_s3_csv.symon_exception import SymonException
 
 LOGGER = singer.get_logger()
 
+S3_REQUEST_FAILED_MESSAGE = 'Amazon S3 request failed.'
+
 skipped_files_count = 0
+_translate_s3_client_errors = False
 
 
 def retry_pattern():
@@ -45,6 +48,12 @@ def log_backoff_attempt(details):
         "Error detected communicating with Amazon, triggering backoff: %d try", details.get("tries"))
 
 
+AWS_ERROR_CODE_BY_HTTP_STATUS = {
+    301: 'PermanentRedirect',
+    403: 'AccessDenied',
+    404: 'NoSuchBucket',
+}
+
 EXPIRED_TOKEN_ERROR_CODES = frozenset({'ExpiredToken'})
 INVALID_CREDENTIALS_ERROR_CODES = frozenset({
     'InvalidToken',
@@ -56,7 +65,7 @@ ACCESS_DENIED_ERROR_CODES = frozenset({
     'AccessDeniedException',
     'KMSAccessDeniedException',
 })
-BUCKET_NOT_FOUND_ERROR_CODES = frozenset({'NoSuchBucket'})
+BUCKET_NOT_FOUND_ERROR_CODES = frozenset({'NoSuchBucket', 'NotFound'})
 INCORRECT_REGION_ERROR_CODES = frozenset({
     'PermanentRedirect',
     'AuthorizationHeaderMalformed',
@@ -64,50 +73,76 @@ INCORRECT_REGION_ERROR_CODES = frozenset({
 })
 
 
+def set_translate_s3_client_errors(enabled):
+    global _translate_s3_client_errors
+    _translate_s3_client_errors = enabled
+
+
+def get_aws_error_code(error):
+    response = getattr(error, 'response', {})
+    aws_error_code = response.get('Error', {}).get('Code', '')
+    if aws_error_code and not str(aws_error_code).isdigit():
+        return aws_error_code
+
+    http_status_code = response.get(
+        'ResponseMetadata', {}
+    ).get('HTTPStatusCode')
+    return AWS_ERROR_CODE_BY_HTTP_STATUS.get(http_status_code, 'Unknown')
+
+
 def build_symon_exception_from_client_error(error, bucket=None):
     """Map known S3 ClientErrors to SymonException; return other errors unchanged."""
+    aws_error_code = get_aws_error_code(error)
     aws_error = getattr(error, 'response', {}).get('Error', {})
-    aws_error_code = aws_error.get('Code', '')
     aws_error_message = aws_error.get('Message', '')
 
-    if aws_error_code:
-        LOGGER.error(
-            'Amazon S3 ClientError (%s): %s',
-            aws_error_code,
-            aws_error_message,
-        )
+    LOGGER.error(
+        'Amazon S3 ClientError (%s): %s',
+        aws_error_code,
+        aws_error_message or error,
+    )
 
     if aws_error_code in EXPIRED_TOKEN_ERROR_CODES:
         return SymonException(
-            'The Amazon S3 session token expired. Update the connection credentials and try again.',
+            S3_REQUEST_FAILED_MESSAGE,
             'amazonS3.expiredTokenError',
         )
 
     if aws_error_code in INVALID_CREDENTIALS_ERROR_CODES:
         return SymonException(
-            'Amazon S3 rejected the credentials. Update the connection credentials and try again.',
+            S3_REQUEST_FAILED_MESSAGE,
             'amazonS3.invalidCredentialsError',
         )
 
     if aws_error_code in ACCESS_DENIED_ERROR_CODES:
         return SymonException(
-            'Amazon S3 denied access. Ask your AWS administrator to check the S3 or KMS permissions.',
+            S3_REQUEST_FAILED_MESSAGE,
             'amazonS3.accessDeniedError',
         )
 
     if aws_error_code in BUCKET_NOT_FOUND_ERROR_CODES:
         return SymonException(
-            'Amazon S3 could not find the bucket. Check the bucket name and region.',
+            S3_REQUEST_FAILED_MESSAGE,
             'amazonS3.bucketNotFoundError',
         )
 
     if aws_error_code in INCORRECT_REGION_ERROR_CODES:
         return SymonException(
-            'The Amazon S3 bucket is in a different AWS region. Update the connection region and try again.',
+            S3_REQUEST_FAILED_MESSAGE,
             'amazonS3.incorrectRegionError',
         )
 
     return error
+
+
+def _raise_client_error(error, bucket=None):
+    if not _translate_s3_client_errors:
+        raise error
+
+    mapped_error = build_symon_exception_from_client_error(error, bucket)
+    if mapped_error is error:
+        raise error
+    raise mapped_error from error
 
 
 class AssumeRoleProvider():
@@ -609,11 +644,14 @@ def list_files_in_bucket(bucket, search_prefix=None, recursive_search=True):
 
     paginator = s3_client.get_paginator('list_objects_v2')
     pages = 0
-    for page in paginator.paginate(**args):
-        pages += 1
-        LOGGER.debug("On page %s", pages)
-        s3_object_count += len(page['Contents'])
-        yield from page['Contents']
+    try:
+        for page in paginator.paginate(**args):
+            pages += 1
+            LOGGER.debug("On page %s", pages)
+            s3_object_count += len(page['Contents'])
+            yield from page['Contents']
+    except ClientError as error:
+        _raise_client_error(error, bucket=bucket)
 
     if s3_object_count > 0:
         LOGGER.info("Found %s files.", s3_object_count)
@@ -629,7 +667,10 @@ def get_file_handle(config, s3_path):
 
     s3_bucket = s3_client.Bucket(bucket)
     s3_object = s3_bucket.Object(s3_path)
-    return s3_object.get()['Body']
+    try:
+        return s3_object.get()['Body']
+    except ClientError as error:
+        _raise_client_error(error, bucket=bucket)
 
 
 class EOLType(Enum):
@@ -749,9 +790,12 @@ class GetFileRangeStream:
             count_s3_calls += 1
             request_range = f'bytes={start_range}-{end_range}'
             # LOGGER.info(f'request range: {request_range}')
-            response = s3_object.get(
-                Range=request_range
-            )
+            try:
+                response = s3_object.get(
+                    Range=request_range
+                )
+            except ClientError as error:
+                _raise_client_error(error, bucket=self.bucket)
             for chunk in response['Body']:
                 # LOGGER.info(f'chunk: {chunk}')
                 yield chunk
@@ -817,7 +861,10 @@ class GetFileRangeStream:
     def __get_content_length__(self):
         s3 = boto3.resource('s3')
         s3_object = s3.Object(self.bucket, self.key)
-        return s3_object.content_length
+        try:
+            return s3_object.content_length
+        except ClientError as error:
+            _raise_client_error(error, bucket=self.bucket)
 
 
 def get_csv_file(bucket: str, key: str, start: int, end: int, range_size: int):

@@ -235,9 +235,16 @@ class TestSetupAwsClient(unittest.TestCase):
 
 class TestBuildSymonExceptionFromClientError(unittest.TestCase):
 
-    def _client_error(self, code, message='raw aws message'):
+    GENERIC_MESSAGE = 'Amazon S3 request failed.'
+
+    def _client_error(self, code, message='raw aws message', http_status_code=None):
+        response = {
+            'Error': {'Code': code, 'Message': message},
+        }
+        if http_status_code is not None:
+            response['ResponseMetadata'] = {'HTTPStatusCode': http_status_code}
         return ClientError(
-            {'Error': {'Code': code, 'Message': message}},
+            response,
             'ListObjectsV2',
         )
 
@@ -246,6 +253,7 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
         result = s3.build_symon_exception_from_client_error(error, bucket)
         self.assertIsInstance(result, SymonException)
         self.assertEqual(result.code, singer_code)
+        self.assertEqual(str(result), self.GENERIC_MESSAGE)
         self.assertNotIn(aws_message, str(result))
         self.assertNotIn(aws_code, str(result))
 
@@ -260,17 +268,12 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
     def test_maps_access_denied_variants(self):
         for aws_code in ('AccessDenied', 'AccessDeniedException', 'KMSAccessDeniedException'):
             with self.subTest(aws_code=aws_code):
-                error = self._client_error(aws_code)
-                result = s3.build_symon_exception_from_client_error(error, 'my-bucket')
-                self.assertIsInstance(result, SymonException)
-                self.assertEqual(result.code, 'amazonS3.accessDeniedError')
-                self.assertEqual(
-                    str(result),
-                    'Amazon S3 denied access. Ask your AWS administrator to check the S3 or KMS permissions.',
-                )
+                self._assert_mapped(aws_code, 'amazonS3.accessDeniedError')
 
     def test_maps_bucket_not_found(self):
-        self._assert_mapped('NoSuchBucket', 'amazonS3.bucketNotFoundError')
+        for aws_code in ('NoSuchBucket', 'NotFound'):
+            with self.subTest(aws_code=aws_code):
+                self._assert_mapped(aws_code, 'amazonS3.bucketNotFoundError')
 
     def test_maps_incorrect_region(self):
         for aws_code in (
@@ -280,6 +283,19 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
         ):
             with self.subTest(aws_code=aws_code):
                 self._assert_mapped(aws_code, 'amazonS3.incorrectRegionError')
+
+    def test_maps_unnamed_http_errors(self):
+        for http_status_code, singer_code in (
+            (301, 'amazonS3.incorrectRegionError'),
+            (403, 'amazonS3.accessDeniedError'),
+            (404, 'amazonS3.bucketNotFoundError'),
+        ):
+            with self.subTest(http_status_code=http_status_code):
+                error = self._client_error(str(http_status_code), http_status_code=http_status_code)
+                result = s3.build_symon_exception_from_client_error(error, 'my-bucket')
+                self.assertIsInstance(result, SymonException)
+                self.assertEqual(result.code, singer_code)
+                self.assertEqual(str(result), self.GENERIC_MESSAGE)
 
     def test_returns_other_client_errors_unchanged(self):
         error = self._client_error('SlowDown')
@@ -296,3 +312,51 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
             'ExpiredToken',
             'The provided token has expired.',
         )
+
+
+class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
+
+    def tearDown(self):
+        s3.set_translate_s3_client_errors(False)
+
+    def _client_error(self, code, message='raw aws message'):
+        return ClientError(
+            {'Error': {'Code': code, 'Message': message}},
+            'ListObjectsV2',
+        )
+
+    @mock.patch('tap_s3_csv.s3.boto3.client')
+    def test_list_files_in_bucket_translates_when_enabled(self, mock_boto_client):
+        aws_error = self._client_error('AccessDenied')
+        mock_boto_client.return_value.get_paginator.return_value.paginate.side_effect = aws_error
+
+        s3.set_translate_s3_client_errors(True)
+        with self.assertRaises(SymonException) as ctx:
+            list(s3.list_files_in_bucket('customer-bucket'))
+
+        self.assertEqual(ctx.exception.code, 'amazonS3.accessDeniedError')
+        self.assertEqual(str(ctx.exception), 'Amazon S3 request failed.')
+        self.assertIs(ctx.exception.__cause__, aws_error)
+
+    @mock.patch('tap_s3_csv.s3.boto3.client')
+    def test_list_files_in_bucket_preserves_client_error_when_disabled(self, mock_boto_client):
+        aws_error = self._client_error('AccessDenied')
+        mock_boto_client.return_value.get_paginator.return_value.paginate.side_effect = aws_error
+
+        with self.assertRaises(ClientError) as ctx:
+            list(s3.list_files_in_bucket('internal-bucket'))
+
+        self.assertIs(ctx.exception, aws_error)
+
+    @mock.patch('tap_s3_csv.s3.boto3.resource')
+    def test_get_file_handle_translates_when_enabled(self, mock_boto_resource):
+        aws_error = self._client_error('NoSuchBucket')
+        mock_boto_resource.return_value.Bucket.return_value.Object.return_value.get.side_effect = aws_error
+        config = {'bucket': 'customer-bucket'}
+
+        s3.set_translate_s3_client_errors(True)
+        with self.assertRaises(SymonException) as ctx:
+            s3.get_file_handle(config, 'missing.csv')
+
+        self.assertEqual(ctx.exception.code, 'amazonS3.bucketNotFoundError')
+        self.assertIs(ctx.exception.__cause__, aws_error)
