@@ -45,17 +45,66 @@ def log_backoff_attempt(details):
         "Error detected communicating with Amazon, triggering backoff: %d try", details.get("tries"))
 
 
+EXPIRED_TOKEN_ERROR_CODES = frozenset({'ExpiredToken'})
+INVALID_CREDENTIALS_ERROR_CODES = frozenset({
+    'InvalidToken',
+    'InvalidAccessKeyId',
+    'SignatureDoesNotMatch',
+})
+ACCESS_DENIED_ERROR_CODES = frozenset({
+    'AccessDenied',
+    'AccessDeniedException',
+    'KMSAccessDeniedException',
+})
+BUCKET_NOT_FOUND_ERROR_CODES = frozenset({'NoSuchBucket'})
+INCORRECT_REGION_ERROR_CODES = frozenset({
+    'PermanentRedirect',
+    'AuthorizationHeaderMalformed',
+    'IllegalLocationConstraintException',
+})
+
+
 def build_symon_exception_from_client_error(error, bucket=None):
-    """Map AccessDenied ClientErrors to SymonException; return other errors unchanged."""
+    """Map known S3 ClientErrors to SymonException; return other errors unchanged."""
     aws_error = getattr(error, 'response', {}).get('Error', {})
     aws_error_code = aws_error.get('Code', '')
+    aws_error_message = aws_error.get('Message', '')
 
-    if aws_error_code in ('AccessDenied', 'AccessDeniedException', 'KMSAccessDeniedException'):
-        bucket_ref = f' "{bucket}"' if bucket else ''
+    if aws_error_code:
+        LOGGER.error(
+            'Amazon S3 ClientError (%s): %s',
+            aws_error_code,
+            aws_error_message,
+        )
+
+    if aws_error_code in EXPIRED_TOKEN_ERROR_CODES:
         return SymonException(
-            f'Unable to access bucket{bucket_ref}. Ensure the policy associated with this connection in your AWS '
-            f'account grants the appropriate permissions.',
-            'amazonS3.accessDeniedError'
+            'The Amazon S3 session token expired. Update the connection credentials and try again.',
+            'amazonS3.expiredTokenError',
+        )
+
+    if aws_error_code in INVALID_CREDENTIALS_ERROR_CODES:
+        return SymonException(
+            'Amazon S3 rejected the credentials. Update the connection credentials and try again.',
+            'amazonS3.invalidCredentialsError',
+        )
+
+    if aws_error_code in ACCESS_DENIED_ERROR_CODES:
+        return SymonException(
+            'Amazon S3 denied access. Ask your AWS administrator to check the S3 or KMS permissions.',
+            'amazonS3.accessDeniedError',
+        )
+
+    if aws_error_code in BUCKET_NOT_FOUND_ERROR_CODES:
+        return SymonException(
+            'Amazon S3 could not find the bucket. Check the bucket name and region.',
+            'amazonS3.bucketNotFoundError',
+        )
+
+    if aws_error_code in INCORRECT_REGION_ERROR_CODES:
+        return SymonException(
+            'The Amazon S3 bucket is in a different AWS region. Update the connection region and try again.',
+            'amazonS3.incorrectRegionError',
         )
 
     return error
@@ -104,7 +153,7 @@ class InMemoryCache:
             return deepcopy(self._cache[key])
         return default
 
-def setup_aws_access_key_client(config):
+def setup_external_source_with_aws_access_key(config):
     session_kwargs = {
         'aws_access_key_id': config['aws_access_key_id'],
         'aws_secret_access_key': config['aws_secret_access_key'],
@@ -117,7 +166,7 @@ def setup_aws_access_key_client(config):
 
 
 @retry_pattern()
-def setup_aws_role_client(config):
+def setup_external_source_with_aws_role_assumption(config):
     role_arn = "arn:aws:iam::{}:role/{}".format(config['account_id'].replace('-', ''),
                                                 config['role_name'])
     session = Session()
