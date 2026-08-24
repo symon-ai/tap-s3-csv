@@ -48,54 +48,53 @@ def log_backoff_attempt(details):
         "Error detected communicating with Amazon, triggering backoff: %d try", details.get("tries"))
 
 
-EXPIRED_TOKEN_ERROR_CODES = frozenset({'ExpiredToken'})
-INVALID_CREDENTIALS_ERROR_CODES = frozenset({
-    'InvalidToken',
-    'InvalidAccessKeyId',
-    'SignatureDoesNotMatch',
-})
-
-
 def set_translate_s3_client_errors(enabled):
     global _translate_s3_client_errors
     _translate_s3_client_errors = enabled
 
 
+def find_client_error(error):
+    """Find a ClientError in error's cause/context chain."""
+    seen = set()
+    unvisited = [error]
+    while unvisited:
+        current = unvisited.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, ClientError):
+            return current
+        unvisited += [current.__cause__, current.__context__]
+    return None
+
+
 def get_aws_error_code(error):
     response = getattr(error, 'response', {})
     aws_error_code = response.get('Error', {}).get('Code', '')
-    if aws_error_code and not str(aws_error_code).isdigit():
-        return aws_error_code
-    return 'Unknown'
+    if not aws_error_code:
+        return 'Unknown'
+    return aws_error_code
 
 
 def build_symon_exception_from_client_error(error, bucket=None):
-    """Map S3 ClientErrors to user-safe Symon exceptions."""
-    aws_error_code = get_aws_error_code(error)
-    aws_error = getattr(error, 'response', {}).get('Error', {})
+    """Translate S3 ClientErrors to user-safe Symon exceptions with raw AWS codes."""
+    client_error = find_client_error(error)
+    if client_error is None:
+        client_error = error
+
+    aws_error_code = get_aws_error_code(client_error)
+    aws_error = getattr(client_error, 'response', {}).get('Error', {})
     aws_error_message = aws_error.get('Message', '')
 
     LOGGER.error(
         'Amazon S3 ClientError (%s): %s',
         aws_error_code,
-        aws_error_message or error,
+        aws_error_message or client_error,
     )
-
-    if aws_error_code in EXPIRED_TOKEN_ERROR_CODES:
-        return SymonException(
-            S3_REQUEST_FAILED_MESSAGE,
-            'amazonS3.expiredTokenError',
-        )
-
-    if aws_error_code in INVALID_CREDENTIALS_ERROR_CODES:
-        return SymonException(
-            S3_REQUEST_FAILED_MESSAGE,
-            'amazonS3.invalidCredentialsError',
-        )
 
     return SymonException(
         S3_REQUEST_FAILED_MESSAGE,
-        'amazonS3.requestFailed',
+        aws_error_code,
     )
 
 

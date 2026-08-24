@@ -298,6 +298,17 @@ def main():
         raise
     except BaseException as e:
         exc_type, exc_value, exc_traceback = sys.exc_info()
+        client_error = s3.find_client_error(e)
+        if client_error is not None:
+            mapped_error = s3.build_symon_exception_from_client_error(
+                client_error)
+            error_info = {
+                'message': traceback.format_exception_only(
+                    type(mapped_error), mapped_error)[-1],
+                'code': mapped_error.code,
+                'traceback': "".join(traceback.format_tb(exc_traceback))
+            }
+            raise mapped_error from e
         error_info = {
             'message': traceback.format_exception_only(exc_type, exc_value)[-1],
             'traceback': "".join(traceback.format_tb(exc_traceback))
