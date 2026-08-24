@@ -268,12 +268,12 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
     def test_maps_access_denied_variants(self):
         for aws_code in ('AccessDenied', 'AccessDeniedException', 'KMSAccessDeniedException'):
             with self.subTest(aws_code=aws_code):
-                self._assert_mapped(aws_code, 'amazonS3.accessDeniedError')
+                self._assert_mapped(aws_code, 'amazonS3.requestFailed')
 
     def test_maps_bucket_not_found(self):
         for aws_code in ('NoSuchBucket', 'NotFound'):
             with self.subTest(aws_code=aws_code):
-                self._assert_mapped(aws_code, 'amazonS3.bucketNotFoundError')
+                self._assert_mapped(aws_code, 'amazonS3.requestFailed')
 
     def test_maps_incorrect_region(self):
         for aws_code in (
@@ -282,25 +282,19 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
             'IllegalLocationConstraintException',
         ):
             with self.subTest(aws_code=aws_code):
-                self._assert_mapped(aws_code, 'amazonS3.incorrectRegionError')
+                self._assert_mapped(aws_code, 'amazonS3.requestFailed')
 
     def test_maps_unnamed_http_errors(self):
-        for http_status_code, singer_code in (
-            (301, 'amazonS3.incorrectRegionError'),
-            (403, 'amazonS3.accessDeniedError'),
-            (404, 'amazonS3.bucketNotFoundError'),
-        ):
+        for http_status_code in (301, 403, 404):
             with self.subTest(http_status_code=http_status_code):
                 error = self._client_error(str(http_status_code), http_status_code=http_status_code)
                 result = s3.build_symon_exception_from_client_error(error, 'my-bucket')
                 self.assertIsInstance(result, SymonException)
-                self.assertEqual(result.code, singer_code)
+                self.assertEqual(result.code, 'amazonS3.requestFailed')
                 self.assertEqual(str(result), self.GENERIC_MESSAGE)
 
-    def test_returns_other_client_errors_unchanged(self):
-        error = self._client_error('SlowDown')
-        result = s3.build_symon_exception_from_client_error(error, 'my-bucket')
-        self.assertIs(result, error)
+    def test_maps_other_client_errors_to_the_safe_fallback(self):
+        self._assert_mapped('SlowDown', 'amazonS3.requestFailed')
 
     @mock.patch('tap_s3_csv.s3.LOGGER')
     def test_logs_original_aws_error_without_exposing_it(self, mock_logger):
@@ -334,7 +328,7 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         with self.assertRaises(SymonException) as ctx:
             list(s3.list_files_in_bucket('customer-bucket'))
 
-        self.assertEqual(ctx.exception.code, 'amazonS3.accessDeniedError')
+        self.assertEqual(ctx.exception.code, 'amazonS3.requestFailed')
         self.assertEqual(str(ctx.exception), 'Amazon S3 request failed.')
         self.assertIs(ctx.exception.__cause__, aws_error)
 
@@ -358,5 +352,5 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         with self.assertRaises(SymonException) as ctx:
             s3.get_file_handle(config, 'missing.csv')
 
-        self.assertEqual(ctx.exception.code, 'amazonS3.bucketNotFoundError')
+        self.assertEqual(ctx.exception.code, 'amazonS3.requestFailed')
         self.assertIs(ctx.exception.__cause__, aws_error)
