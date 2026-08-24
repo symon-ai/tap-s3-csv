@@ -5,6 +5,7 @@ import time
 import traceback
 import boto3
 
+from botocore.exceptions import ClientError
 from singer import metadata
 from tap_s3_csv.discover import discover_streams
 from tap_s3_csv import s3
@@ -33,6 +34,11 @@ ERROR_END_MARKER = '[tap_error_end]'
 def _resolve_auth_method(config):
     auth_method = config.get('auth_method')
     if auth_method is not None:
+        if auth_method not in (AUTH_METHOD_ACCESS_KEY, AUTH_METHOD_ROLE):
+            raise ValueError(
+                f'Unsupported auth_method {auth_method!r}. '
+                f'Must be {AUTH_METHOD_ACCESS_KEY!r} or {AUTH_METHOD_ROLE!r}.'
+            )
         return auth_method
     return AUTH_METHOD_ROLE if 'external_id' in config else None
 
@@ -263,7 +269,6 @@ def main():
 
         try:
             if external_source:
-                s3.set_translate_s3_client_errors(True)
                 if auth_method == AUTH_METHOD_ACCESS_KEY:
                     s3.setup_external_source_with_aws_access_key(config)
                 else:
@@ -282,9 +287,18 @@ def main():
                 do_discover(args.config)
             elif args.properties:
                 do_sync(config, args.properties, args.state)
-        finally:
+        except ClientError as e:
+            if not external_source:
+                raise
+            raise s3.build_symon_exception_from_client_error(
+                e, config.get('bucket')) from e
+        except BaseException as e:
             if external_source:
-                s3.set_translate_s3_client_errors(False)
+                client_error = s3.find_client_error(e)
+                if client_error is not None:
+                    raise s3.build_symon_exception_from_client_error(
+                        client_error, config.get('bucket')) from e
+            raise
     except SymonException as e:
         exc_type, exc_value, exc_traceback = sys.exc_info()
         error_info = {
@@ -298,17 +312,6 @@ def main():
         raise
     except BaseException as e:
         exc_type, exc_value, exc_traceback = sys.exc_info()
-        client_error = s3.find_client_error(e)
-        if client_error is not None:
-            mapped_error = s3.build_symon_exception_from_client_error(
-                client_error)
-            error_info = {
-                'message': traceback.format_exception_only(
-                    type(mapped_error), mapped_error)[-1],
-                'code': mapped_error.code,
-                'traceback': "".join(traceback.format_tb(exc_traceback))
-            }
-            raise mapped_error from e
         error_info = {
             'message': traceback.format_exception_only(exc_type, exc_value)[-1],
             'traceback': "".join(traceback.format_tb(exc_traceback))

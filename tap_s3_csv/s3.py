@@ -32,7 +32,6 @@ LOGGER = singer.get_logger()
 S3_REQUEST_FAILED_MESSAGE = 'Amazon S3 request failed.'
 
 skipped_files_count = 0
-_translate_s3_client_errors = False
 
 
 def retry_pattern():
@@ -46,11 +45,6 @@ def retry_pattern():
 def log_backoff_attempt(details):
     LOGGER.info(
         "Error detected communicating with Amazon, triggering backoff: %d try", details.get("tries"))
-
-
-def set_translate_s3_client_errors(enabled):
-    global _translate_s3_client_errors
-    _translate_s3_client_errors = enabled
 
 
 def find_client_error(error):
@@ -96,14 +90,6 @@ def build_symon_exception_from_client_error(error, bucket=None):
         S3_REQUEST_FAILED_MESSAGE,
         aws_error_code,
     )
-
-
-def _raise_client_error(error, bucket=None):
-    if not _translate_s3_client_errors:
-        raise error
-
-    mapped_error = build_symon_exception_from_client_error(error, bucket)
-    raise mapped_error from error
 
 
 class AssumeRoleProvider():
@@ -605,14 +591,11 @@ def list_files_in_bucket(bucket, search_prefix=None, recursive_search=True):
 
     paginator = s3_client.get_paginator('list_objects_v2')
     pages = 0
-    try:
-        for page in paginator.paginate(**args):
-            pages += 1
-            LOGGER.debug("On page %s", pages)
-            s3_object_count += len(page['Contents'])
-            yield from page['Contents']
-    except ClientError as error:
-        _raise_client_error(error, bucket=bucket)
+    for page in paginator.paginate(**args):
+        pages += 1
+        LOGGER.debug("On page %s", pages)
+        s3_object_count += len(page['Contents'])
+        yield from page['Contents']
 
     if s3_object_count > 0:
         LOGGER.info("Found %s files.", s3_object_count)
@@ -628,10 +611,7 @@ def get_file_handle(config, s3_path):
 
     s3_bucket = s3_client.Bucket(bucket)
     s3_object = s3_bucket.Object(s3_path)
-    try:
-        return s3_object.get()['Body']
-    except ClientError as error:
-        _raise_client_error(error, bucket=bucket)
+    return s3_object.get()['Body']
 
 
 class EOLType(Enum):
@@ -751,12 +731,9 @@ class GetFileRangeStream:
             count_s3_calls += 1
             request_range = f'bytes={start_range}-{end_range}'
             # LOGGER.info(f'request range: {request_range}')
-            try:
-                response = s3_object.get(
-                    Range=request_range
-                )
-            except ClientError as error:
-                _raise_client_error(error, bucket=self.bucket)
+            response = s3_object.get(
+                Range=request_range
+            )
             for chunk in response['Body']:
                 # LOGGER.info(f'chunk: {chunk}')
                 yield chunk
@@ -822,10 +799,7 @@ class GetFileRangeStream:
     def __get_content_length__(self):
         s3 = boto3.resource('s3')
         s3_object = s3.Object(self.bucket, self.key)
-        try:
-            return s3_object.content_length
-        except ClientError as error:
-            _raise_client_error(error, bucket=self.bucket)
+        return s3_object.content_length
 
 
 def get_csv_file(bucket: str, key: str, start: int, end: int, range_size: int):
