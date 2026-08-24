@@ -48,28 +48,11 @@ def log_backoff_attempt(details):
         "Error detected communicating with Amazon, triggering backoff: %d try", details.get("tries"))
 
 
-AWS_ERROR_CODE_BY_HTTP_STATUS = {
-    301: 'PermanentRedirect',
-    403: 'AccessDenied',
-    404: 'NoSuchBucket',
-}
-
 EXPIRED_TOKEN_ERROR_CODES = frozenset({'ExpiredToken'})
 INVALID_CREDENTIALS_ERROR_CODES = frozenset({
     'InvalidToken',
     'InvalidAccessKeyId',
     'SignatureDoesNotMatch',
-})
-ACCESS_DENIED_ERROR_CODES = frozenset({
-    'AccessDenied',
-    'AccessDeniedException',
-    'KMSAccessDeniedException',
-})
-BUCKET_NOT_FOUND_ERROR_CODES = frozenset({'NoSuchBucket', 'NotFound'})
-INCORRECT_REGION_ERROR_CODES = frozenset({
-    'PermanentRedirect',
-    'AuthorizationHeaderMalformed',
-    'IllegalLocationConstraintException',
 })
 
 
@@ -83,15 +66,11 @@ def get_aws_error_code(error):
     aws_error_code = response.get('Error', {}).get('Code', '')
     if aws_error_code and not str(aws_error_code).isdigit():
         return aws_error_code
-
-    http_status_code = response.get(
-        'ResponseMetadata', {}
-    ).get('HTTPStatusCode')
-    return AWS_ERROR_CODE_BY_HTTP_STATUS.get(http_status_code, 'Unknown')
+    return 'Unknown'
 
 
 def build_symon_exception_from_client_error(error, bucket=None):
-    """Map known S3 ClientErrors to SymonException; return other errors unchanged."""
+    """Map S3 ClientErrors to user-safe Symon exceptions."""
     aws_error_code = get_aws_error_code(error)
     aws_error = getattr(error, 'response', {}).get('Error', {})
     aws_error_message = aws_error.get('Message', '')
@@ -114,25 +93,10 @@ def build_symon_exception_from_client_error(error, bucket=None):
             'amazonS3.invalidCredentialsError',
         )
 
-    if aws_error_code in ACCESS_DENIED_ERROR_CODES:
-        return SymonException(
-            S3_REQUEST_FAILED_MESSAGE,
-            'amazonS3.accessDeniedError',
-        )
-
-    if aws_error_code in BUCKET_NOT_FOUND_ERROR_CODES:
-        return SymonException(
-            S3_REQUEST_FAILED_MESSAGE,
-            'amazonS3.bucketNotFoundError',
-        )
-
-    if aws_error_code in INCORRECT_REGION_ERROR_CODES:
-        return SymonException(
-            S3_REQUEST_FAILED_MESSAGE,
-            'amazonS3.incorrectRegionError',
-        )
-
-    return error
+    return SymonException(
+        S3_REQUEST_FAILED_MESSAGE,
+        'amazonS3.requestFailed',
+    )
 
 
 def _raise_client_error(error, bucket=None):
@@ -140,8 +104,6 @@ def _raise_client_error(error, bucket=None):
         raise error
 
     mapped_error = build_symon_exception_from_client_error(error, bucket)
-    if mapped_error is error:
-        raise error
     raise mapped_error from error
 
 
