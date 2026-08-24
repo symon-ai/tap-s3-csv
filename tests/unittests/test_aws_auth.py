@@ -55,6 +55,18 @@ class TestResolveAuthMethod(unittest.TestCase):
         }
         self.assertIsNone(tap_s3_csv._resolve_auth_method(config))
 
+    def test_invalid_auth_method_raises(self):
+        config = {'auth_method': 'invalid'}
+        with self.assertRaises(ValueError):
+            tap_s3_csv._resolve_auth_method(config)
+
+    def test_explicit_auth_method_ignores_legacy_external_id_fallback(self):
+        config = {
+            'auth_method': 'awsAccessKey',
+            'external_id': 'legacy-external-id',
+        }
+        self.assertEqual(tap_s3_csv._resolve_auth_method(config), 'awsAccessKey')
+
 
 class TestAuthRouting(unittest.TestCase):
 
@@ -345,9 +357,6 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
 
 class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
 
-    def tearDown(self):
-        s3.set_translate_s3_client_errors(False)
-
     def _client_error(self, code, message='raw aws message'):
         return ClientError(
             {'Error': {'Code': code, 'Message': message}},
@@ -355,40 +364,111 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         )
 
     @mock.patch('tap_s3_csv.s3.boto3.client')
-    def test_list_files_in_bucket_translates_when_enabled(self, mock_boto_client):
+    def test_list_files_in_bucket_leaves_client_error_for_retry(self, mock_boto_client):
         aws_error = self._client_error('AccessDenied')
         mock_boto_client.return_value.get_paginator.return_value.paginate.side_effect = aws_error
 
-        s3.set_translate_s3_client_errors(True)
-        with self.assertRaises(SymonException) as ctx:
+        with self.assertRaises(ClientError) as ctx:
             list(s3.list_files_in_bucket('customer-bucket'))
+
+        self.assertIs(ctx.exception, aws_error)
+
+    @mock.patch('backoff._sync.time.sleep')
+    @mock.patch('tap_s3_csv.s3.boto3.resource')
+    def test_get_file_handle_retries_transient_slow_down(
+            self, mock_boto_resource, mock_sleep):
+        aws_error = self._client_error('SlowDown')
+        get_object = (
+            mock_boto_resource.return_value.Bucket.return_value.Object.return_value.get
+        )
+        get_object.side_effect = aws_error
+
+        with self.assertRaises(ClientError):
+            s3.get_file_handle({'bucket': 'bucket'}, 'missing.csv')
+
+        self.assertEqual(get_object.call_count, 5)
+
+    @mock.patch('backoff._sync.time.sleep')
+    @mock.patch('tap_s3_csv.s3.boto3.resource')
+    def test_get_file_handle_leaves_client_error_untranslated(
+            self, mock_boto_resource, mock_sleep):
+        aws_error = self._client_error('NoSuchBucket')
+        mock_boto_resource.return_value.Bucket.return_value.Object.return_value.get.side_effect = aws_error
+        config = {'bucket': 'customer-bucket'}
+
+        with self.assertRaises(ClientError) as ctx:
+            s3.get_file_handle(config, 'missing.csv')
+
+        self.assertIs(ctx.exception, aws_error)
+
+    @mock.patch('tap_s3_csv.do_discover')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
+    @mock.patch('singer.utils.parse_args')
+    def test_external_source_translates_client_error_at_main_boundary(
+            self, mock_parse_args, mock_setup_access_key, mock_do_discover):
+        config = {
+            'bucket': 'customer-bucket',
+            'auth_method': 'awsAccessKey',
+            'aws_access_key_id': 'AKIAEXAMPLE',
+            'aws_secret_access_key': 'secret',
+            'tables': _sample_tables(),
+        }
+        mock_parse_args.side_effect = _make_parse_args_side_effect(config)
+        aws_error = self._client_error('AccessDenied')
+        mock_do_discover.side_effect = aws_error
+
+        with self.assertRaises(SymonException) as ctx:
+            tap_s3_csv.main()
 
         self.assertEqual(ctx.exception.code, 'AccessDenied')
         self.assertEqual(str(ctx.exception), 'Amazon S3 request failed.')
         self.assertIs(ctx.exception.__cause__, aws_error)
 
-    @mock.patch('tap_s3_csv.s3.boto3.client')
-    def test_list_files_in_bucket_preserves_client_error_when_disabled(self, mock_boto_client):
+    @mock.patch('tap_s3_csv.do_discover')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
+    @mock.patch('singer.utils.parse_args')
+    def test_external_source_translates_wrapped_client_error_at_main_boundary(
+            self, mock_parse_args, mock_setup_access_key, mock_do_discover):
+        config = {
+            'bucket': 'customer-bucket',
+            'auth_method': 'awsAccessKey',
+            'aws_access_key_id': 'AKIAEXAMPLE',
+            'aws_secret_access_key': 'secret',
+            'tables': _sample_tables(),
+        }
+        mock_parse_args.side_effect = _make_parse_args_side_effect(config)
         aws_error = self._client_error('AccessDenied')
-        mock_boto_client.return_value.get_paginator.return_value.paginate.side_effect = aws_error
+        wrapped = RuntimeError('wrapper')
+        wrapped.__cause__ = aws_error
+        mock_do_discover.side_effect = wrapped
+
+        with self.assertRaises(SymonException) as ctx:
+            tap_s3_csv.main()
+
+        self.assertEqual(ctx.exception.code, 'AccessDenied')
+        self.assertIs(ctx.exception.__cause__, wrapped)
+
+    @mock.patch('tap_s3_csv.do_discover')
+    @mock.patch('tap_s3_csv.dialect.detect_tables_dialect')
+    @mock.patch('tap_s3_csv.s3.list_files_in_bucket')
+    @mock.patch('singer.utils.parse_args')
+    def test_internal_source_preserves_client_error_at_main_boundary(
+            self, mock_parse_args, mock_list_files, mock_detect_dialect,
+            mock_do_discover):
+        config = {
+            'bucket': 'internal-bucket',
+            'tables': _sample_tables(),
+        }
+        mock_parse_args.side_effect = _make_parse_args_side_effect(config)
+        aws_error = self._client_error('AccessDenied')
+        mock_list_files.return_value = iter([{'Key': 'file.csv'}])
+        mock_do_discover.side_effect = aws_error
 
         with self.assertRaises(ClientError) as ctx:
-            list(s3.list_files_in_bucket('internal-bucket'))
+            tap_s3_csv.main()
 
         self.assertIs(ctx.exception, aws_error)
-
-    @mock.patch('tap_s3_csv.s3.boto3.resource')
-    def test_get_file_handle_translates_when_enabled(self, mock_boto_resource):
-        aws_error = self._client_error('NoSuchBucket')
-        mock_boto_resource.return_value.Bucket.return_value.Object.return_value.get.side_effect = aws_error
-        config = {'bucket': 'customer-bucket'}
-
-        s3.set_translate_s3_client_errors(True)
-        with self.assertRaises(SymonException) as ctx:
-            s3.get_file_handle(config, 'missing.csv')
-
-        self.assertEqual(ctx.exception.code, 'NoSuchBucket')
-        self.assertIs(ctx.exception.__cause__, aws_error)
+        mock_detect_dialect.assert_called_once_with(config)
 
     @mock.patch('tap_s3_csv.LOGGER')
     @mock.patch('tap_s3_csv.do_discover')
