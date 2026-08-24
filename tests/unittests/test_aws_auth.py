@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest import mock
 
@@ -248,53 +249,87 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
             'ListObjectsV2',
         )
 
-    def _assert_mapped(self, aws_code, singer_code, bucket='my-bucket', aws_message='raw aws message'):
+    def _assert_raw_code(self, aws_code, bucket='my-bucket', aws_message='raw aws message'):
         error = self._client_error(aws_code, aws_message)
         result = s3.build_symon_exception_from_client_error(error, bucket)
         self.assertIsInstance(result, SymonException)
-        self.assertEqual(result.code, singer_code)
+        self.assertEqual(result.code, aws_code)
         self.assertEqual(str(result), self.GENERIC_MESSAGE)
         self.assertNotIn(aws_message, str(result))
         self.assertNotIn(aws_code, str(result))
 
-    def test_maps_expired_token(self):
-        self._assert_mapped('ExpiredToken', 'amazonS3.expiredTokenError')
+    def test_preserves_expired_token(self):
+        self._assert_raw_code('ExpiredToken')
 
-    def test_maps_invalid_credentials(self):
+    def test_preserves_invalid_credentials(self):
         for aws_code in ('InvalidToken', 'InvalidAccessKeyId', 'SignatureDoesNotMatch'):
             with self.subTest(aws_code=aws_code):
-                self._assert_mapped(aws_code, 'amazonS3.invalidCredentialsError')
+                self._assert_raw_code(aws_code)
 
-    def test_maps_access_denied_variants(self):
+    def test_preserves_access_denied_variants(self):
         for aws_code in ('AccessDenied', 'AccessDeniedException', 'KMSAccessDeniedException'):
             with self.subTest(aws_code=aws_code):
-                self._assert_mapped(aws_code, 'amazonS3.requestFailed')
+                self._assert_raw_code(aws_code)
 
-    def test_maps_bucket_not_found(self):
+    def test_preserves_bucket_not_found(self):
         for aws_code in ('NoSuchBucket', 'NotFound'):
             with self.subTest(aws_code=aws_code):
-                self._assert_mapped(aws_code, 'amazonS3.requestFailed')
+                self._assert_raw_code(aws_code)
 
-    def test_maps_incorrect_region(self):
+    def test_preserves_incorrect_region(self):
         for aws_code in (
             'PermanentRedirect',
             'AuthorizationHeaderMalformed',
             'IllegalLocationConstraintException',
         ):
             with self.subTest(aws_code=aws_code):
-                self._assert_mapped(aws_code, 'amazonS3.requestFailed')
+                self._assert_raw_code(aws_code)
 
-    def test_maps_unnamed_http_errors(self):
+    def test_preserves_numeric_http_errors(self):
         for http_status_code in (301, 403, 404):
             with self.subTest(http_status_code=http_status_code):
-                error = self._client_error(str(http_status_code), http_status_code=http_status_code)
+                error = self._client_error(
+                    str(http_status_code),
+                    http_status_code=http_status_code,
+                )
                 result = s3.build_symon_exception_from_client_error(error, 'my-bucket')
                 self.assertIsInstance(result, SymonException)
-                self.assertEqual(result.code, 'amazonS3.requestFailed')
+                self.assertEqual(result.code, str(http_status_code))
                 self.assertEqual(str(result), self.GENERIC_MESSAGE)
 
-    def test_maps_other_client_errors_to_the_safe_fallback(self):
-        self._assert_mapped('SlowDown', 'amazonS3.requestFailed')
+    def test_preserves_slow_down(self):
+        self._assert_raw_code('SlowDown')
+
+    def test_missing_code_returns_unknown(self):
+        error = ClientError({'Error': {'Message': 'no code'}}, 'ListObjectsV2')
+        result = s3.build_symon_exception_from_client_error(error)
+        self.assertEqual(result.code, 'Unknown')
+        self.assertEqual(str(result), self.GENERIC_MESSAGE)
+
+    def test_empty_code_returns_unknown(self):
+        error = self._client_error('')
+        result = s3.build_symon_exception_from_client_error(error)
+        self.assertEqual(result.code, 'Unknown')
+        self.assertEqual(str(result), self.GENERIC_MESSAGE)
+
+    def test_preserves_unfamiliar_code(self):
+        self._assert_raw_code('SomeNewAwsErrorCode')
+
+    def test_finds_wrapped_client_error(self):
+        inner = self._client_error('AccessDenied')
+        wrapped = RuntimeError('wrapper')
+        wrapped.__cause__ = inner
+        result = s3.build_symon_exception_from_client_error(wrapped)
+        self.assertEqual(result.code, 'AccessDenied')
+        self.assertEqual(str(result), self.GENERIC_MESSAGE)
+
+    def test_cycle_safe_wrapped_lookup(self):
+        inner = self._client_error('AccessDenied')
+        wrapped = RuntimeError('wrapper')
+        wrapped.__cause__ = inner
+        inner.__context__ = wrapped
+        result = s3.build_symon_exception_from_client_error(wrapped)
+        self.assertEqual(result.code, 'AccessDenied')
 
     @mock.patch('tap_s3_csv.s3.LOGGER')
     def test_logs_original_aws_error_without_exposing_it(self, mock_logger):
@@ -328,7 +363,7 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         with self.assertRaises(SymonException) as ctx:
             list(s3.list_files_in_bucket('customer-bucket'))
 
-        self.assertEqual(ctx.exception.code, 'amazonS3.requestFailed')
+        self.assertEqual(ctx.exception.code, 'AccessDenied')
         self.assertEqual(str(ctx.exception), 'Amazon S3 request failed.')
         self.assertIs(ctx.exception.__cause__, aws_error)
 
@@ -352,5 +387,41 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         with self.assertRaises(SymonException) as ctx:
             s3.get_file_handle(config, 'missing.csv')
 
-        self.assertEqual(ctx.exception.code, 'amazonS3.requestFailed')
+        self.assertEqual(ctx.exception.code, 'NoSuchBucket')
         self.assertIs(ctx.exception.__cause__, aws_error)
+
+    @mock.patch('tap_s3_csv.LOGGER')
+    @mock.patch('tap_s3_csv.do_discover')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
+    @mock.patch('singer.utils.parse_args')
+    def test_tap_error_transport_emits_raw_code(
+            self, mock_parse_args, mock_setup_access_key,
+            mock_do_discover, mock_logger):
+        config = {
+            'bucket': 'customer-bucket',
+            'auth_method': 'awsAccessKey',
+            'aws_access_key_id': 'AKIAEXAMPLE',
+            'aws_secret_access_key': 'secret',
+            'tables': _sample_tables(),
+        }
+        mock_parse_args.side_effect = _make_parse_args_side_effect(config)
+        mock_do_discover.side_effect = SymonException(
+            'Amazon S3 request failed.',
+            'ExpiredToken',
+        )
+
+        with self.assertRaises(SymonException) as ctx:
+            tap_s3_csv.main()
+
+        self.assertEqual(ctx.exception.code, 'ExpiredToken')
+        logged_payloads = [
+            call.args[0]
+            for call in mock_logger.info.call_args_list
+            if call.args and call.args[0].startswith(tap_s3_csv.ERROR_START_MARKER)
+        ]
+        self.assertEqual(len(logged_payloads), 1)
+        error_info = json.loads(
+            logged_payloads[0][len(tap_s3_csv.ERROR_START_MARKER):-len(tap_s3_csv.ERROR_END_MARKER)]
+        )
+        self.assertEqual(error_info['code'], 'ExpiredToken')
+        self.assertNotIn('The provided token has expired.', error_info['message'])
