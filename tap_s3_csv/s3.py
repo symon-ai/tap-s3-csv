@@ -29,6 +29,8 @@ from tap_s3_csv.symon_exception import SymonException
 
 LOGGER = singer.get_logger()
 
+S3_REQUEST_FAILED_MESSAGE = 'Amazon S3 request failed.'
+
 skipped_files_count = 0
 
 
@@ -45,20 +47,49 @@ def log_backoff_attempt(details):
         "Error detected communicating with Amazon, triggering backoff: %d try", details.get("tries"))
 
 
+def find_client_error(error):
+    """Find a ClientError in error's cause/context chain."""
+    seen = set()
+    unvisited = [error]
+    while unvisited:
+        current = unvisited.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, ClientError):
+            return current
+        unvisited += [current.__cause__, current.__context__]
+    return None
+
+
+def get_aws_error_code(error):
+    response = getattr(error, 'response', {})
+    aws_error_code = response.get('Error', {}).get('Code', '')
+    if not aws_error_code:
+        return 'Unknown'
+    return aws_error_code
+
+
 def build_symon_exception_from_client_error(error, bucket=None):
-    """Map AccessDenied ClientErrors to SymonException; return other errors unchanged."""
-    aws_error = getattr(error, 'response', {}).get('Error', {})
-    aws_error_code = aws_error.get('Code', '')
+    """Translate S3 ClientErrors to user-safe Symon exceptions with raw AWS codes."""
+    client_error = find_client_error(error)
+    if client_error is None:
+        client_error = error
 
-    if aws_error_code in ('AccessDenied', 'AccessDeniedException', 'KMSAccessDeniedException'):
-        bucket_ref = f' "{bucket}"' if bucket else ''
-        return SymonException(
-            f'Unable to access bucket{bucket_ref}. Ensure the policy associated with this connection in your AWS '
-            f'account grants the appropriate permissions.',
-            'amazonS3.accessDeniedError'
-        )
+    aws_error_code = get_aws_error_code(client_error)
+    aws_error = getattr(client_error, 'response', {}).get('Error', {})
+    aws_error_message = aws_error.get('Message', '')
 
-    return error
+    LOGGER.error(
+        'Amazon S3 ClientError (%s): %s',
+        aws_error_code,
+        aws_error_message or client_error,
+    )
+
+    return SymonException(
+        S3_REQUEST_FAILED_MESSAGE,
+        aws_error_code,
+    )
 
 
 class AssumeRoleProvider():
@@ -104,7 +135,7 @@ class InMemoryCache:
             return deepcopy(self._cache[key])
         return default
 
-def setup_aws_access_key_client(config):
+def setup_external_source_with_aws_access_key(config):
     session_kwargs = {
         'aws_access_key_id': config['aws_access_key_id'],
         'aws_secret_access_key': config['aws_secret_access_key'],
@@ -117,7 +148,7 @@ def setup_aws_access_key_client(config):
 
 
 @retry_pattern()
-def setup_aws_role_client(config):
+def setup_external_source_with_aws_role_assumption(config):
     role_arn = "arn:aws:iam::{}:role/{}".format(config['account_id'].replace('-', ''),
                                                 config['role_name'])
     session = Session()
