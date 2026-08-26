@@ -249,6 +249,7 @@ class TestSetupAwsClient(unittest.TestCase):
 class TestBuildSymonExceptionFromClientError(unittest.TestCase):
 
     GENERIC_MESSAGE = 'Amazon S3 request failed.'
+    GENERIC_CODE = 'amazonS3.requestFailed'
 
     def _client_error(self, code, message='raw aws message', http_status_code=None):
         response = {
@@ -261,43 +262,43 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
             'ListObjectsV2',
         )
 
-    def _assert_raw_code(self, aws_code, bucket='my-bucket', aws_message='raw aws message'):
+    def _assert_generic_contract(self, aws_code, bucket='my-bucket', aws_message='raw aws message'):
         error = self._client_error(aws_code, aws_message)
         result = s3.build_symon_exception_from_client_error(error, bucket)
         self.assertIsInstance(result, SymonException)
-        self.assertEqual(result.code, aws_code)
+        self.assertEqual(result.code, self.GENERIC_CODE)
         self.assertEqual(str(result), self.GENERIC_MESSAGE)
         self.assertNotIn(aws_message, str(result))
         self.assertNotIn(aws_code, str(result))
 
-    def test_preserves_expired_token(self):
-        self._assert_raw_code('ExpiredToken')
+    def test_expired_token_uses_generic_contract(self):
+        self._assert_generic_contract('ExpiredToken')
 
-    def test_preserves_invalid_credentials(self):
+    def test_invalid_credentials_use_generic_contract(self):
         for aws_code in ('InvalidToken', 'InvalidAccessKeyId', 'SignatureDoesNotMatch'):
             with self.subTest(aws_code=aws_code):
-                self._assert_raw_code(aws_code)
+                self._assert_generic_contract(aws_code)
 
-    def test_preserves_access_denied_variants(self):
+    def test_access_denied_variants_use_generic_contract(self):
         for aws_code in ('AccessDenied', 'AccessDeniedException', 'KMSAccessDeniedException'):
             with self.subTest(aws_code=aws_code):
-                self._assert_raw_code(aws_code)
+                self._assert_generic_contract(aws_code)
 
-    def test_preserves_bucket_not_found(self):
+    def test_bucket_not_found_uses_generic_contract(self):
         for aws_code in ('NoSuchBucket', 'NotFound'):
             with self.subTest(aws_code=aws_code):
-                self._assert_raw_code(aws_code)
+                self._assert_generic_contract(aws_code)
 
-    def test_preserves_incorrect_region(self):
+    def test_incorrect_region_uses_generic_contract(self):
         for aws_code in (
             'PermanentRedirect',
             'AuthorizationHeaderMalformed',
             'IllegalLocationConstraintException',
         ):
             with self.subTest(aws_code=aws_code):
-                self._assert_raw_code(aws_code)
+                self._assert_generic_contract(aws_code)
 
-    def test_preserves_numeric_http_errors(self):
+    def test_numeric_http_errors_use_generic_contract(self):
         for http_status_code in (301, 403, 404):
             with self.subTest(http_status_code=http_status_code):
                 error = self._client_error(
@@ -306,33 +307,33 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
                 )
                 result = s3.build_symon_exception_from_client_error(error, 'my-bucket')
                 self.assertIsInstance(result, SymonException)
-                self.assertEqual(result.code, str(http_status_code))
+                self.assertEqual(result.code, self.GENERIC_CODE)
                 self.assertEqual(str(result), self.GENERIC_MESSAGE)
 
-    def test_preserves_slow_down(self):
-        self._assert_raw_code('SlowDown')
+    def test_slow_down_uses_generic_contract(self):
+        self._assert_generic_contract('SlowDown')
 
-    def test_missing_code_returns_unknown(self):
+    def test_missing_code_uses_generic_contract(self):
         error = ClientError({'Error': {'Message': 'no code'}}, 'ListObjectsV2')
         result = s3.build_symon_exception_from_client_error(error)
-        self.assertEqual(result.code, 'Unknown')
+        self.assertEqual(result.code, self.GENERIC_CODE)
         self.assertEqual(str(result), self.GENERIC_MESSAGE)
 
-    def test_empty_code_returns_unknown(self):
+    def test_empty_code_uses_generic_contract(self):
         error = self._client_error('')
         result = s3.build_symon_exception_from_client_error(error)
-        self.assertEqual(result.code, 'Unknown')
+        self.assertEqual(result.code, self.GENERIC_CODE)
         self.assertEqual(str(result), self.GENERIC_MESSAGE)
 
-    def test_preserves_unfamiliar_code(self):
-        self._assert_raw_code('SomeNewAwsErrorCode')
+    def test_unfamiliar_code_uses_generic_contract(self):
+        self._assert_generic_contract('SomeNewAwsErrorCode')
 
     def test_finds_wrapped_client_error(self):
         inner = self._client_error('AccessDenied')
         wrapped = RuntimeError('wrapper')
         wrapped.__cause__ = inner
         result = s3.build_symon_exception_from_client_error(wrapped)
-        self.assertEqual(result.code, 'AccessDenied')
+        self.assertEqual(result.code, self.GENERIC_CODE)
         self.assertEqual(str(result), self.GENERIC_MESSAGE)
 
     def test_cycle_safe_wrapped_lookup(self):
@@ -341,7 +342,7 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
         wrapped.__cause__ = inner
         inner.__context__ = wrapped
         result = s3.build_symon_exception_from_client_error(wrapped)
-        self.assertEqual(result.code, 'AccessDenied')
+        self.assertEqual(result.code, self.GENERIC_CODE)
 
     @mock.patch('tap_s3_csv.s3.LOGGER')
     def test_logs_original_aws_error_without_exposing_it(self, mock_logger):
@@ -420,7 +421,7 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         with self.assertRaises(SymonException) as ctx:
             tap_s3_csv.main()
 
-        self.assertEqual(ctx.exception.code, 'AccessDenied')
+        self.assertEqual(ctx.exception.code, 'amazonS3.requestFailed')
         self.assertEqual(str(ctx.exception), 'Amazon S3 request failed.')
         self.assertIs(ctx.exception.__cause__, aws_error)
 
@@ -445,7 +446,7 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         with self.assertRaises(SymonException) as ctx:
             tap_s3_csv.main()
 
-        self.assertEqual(ctx.exception.code, 'AccessDenied')
+        self.assertEqual(ctx.exception.code, 'amazonS3.requestFailed')
         self.assertIs(ctx.exception.__cause__, wrapped)
 
     @mock.patch('tap_s3_csv.do_discover')
@@ -474,7 +475,7 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
     @mock.patch('tap_s3_csv.do_discover')
     @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
     @mock.patch('singer.utils.parse_args')
-    def test_tap_error_transport_emits_raw_code(
+    def test_tap_error_transport_emits_generic_code(
             self, mock_parse_args, mock_setup_access_key,
             mock_do_discover, mock_logger):
         config = {
@@ -487,13 +488,13 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         mock_parse_args.side_effect = _make_parse_args_side_effect(config)
         mock_do_discover.side_effect = SymonException(
             'Amazon S3 request failed.',
-            'ExpiredToken',
+            'amazonS3.requestFailed',
         )
 
         with self.assertRaises(SymonException) as ctx:
             tap_s3_csv.main()
 
-        self.assertEqual(ctx.exception.code, 'ExpiredToken')
+        self.assertEqual(ctx.exception.code, 'amazonS3.requestFailed')
         logged_payloads = [
             call.args[0]
             for call in mock_logger.info.call_args_list
@@ -503,5 +504,5 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         error_info = json.loads(
             logged_payloads[0][len(tap_s3_csv.ERROR_START_MARKER):-len(tap_s3_csv.ERROR_END_MARKER)]
         )
-        self.assertEqual(error_info['code'], 'ExpiredToken')
+        self.assertEqual(error_info['code'], 'amazonS3.requestFailed')
         self.assertNotIn('The provided token has expired.', error_info['message'])
