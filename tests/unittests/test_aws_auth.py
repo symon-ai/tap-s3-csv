@@ -262,9 +262,9 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
             'ListObjectsV2',
         )
 
-    def _assert_generic_contract(self, aws_code, bucket='my-bucket', aws_message='raw aws message'):
+    def _assert_generic_contract(self, aws_code, aws_message='raw aws message'):
         error = self._client_error(aws_code, aws_message)
-        result = s3.build_symon_exception_from_client_error(error, bucket)
+        result = s3.build_symon_exception_from_client_error(error)
         self.assertIsInstance(result, SymonException)
         self.assertEqual(result.code, self.GENERIC_CODE)
         self.assertEqual(str(result), self.GENERIC_MESSAGE)
@@ -305,7 +305,7 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
                     str(http_status_code),
                     http_status_code=http_status_code,
                 )
-                result = s3.build_symon_exception_from_client_error(error, 'my-bucket')
+                result = s3.build_symon_exception_from_client_error(error)
                 self.assertIsInstance(result, SymonException)
                 self.assertEqual(result.code, self.GENERIC_CODE)
                 self.assertEqual(str(result), self.GENERIC_MESSAGE)
@@ -347,7 +347,7 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
     @mock.patch('tap_s3_csv.s3.LOGGER')
     def test_logs_original_aws_error_without_exposing_it(self, mock_logger):
         error = self._client_error('ExpiredToken', 'The provided token has expired.')
-        s3.build_symon_exception_from_client_error(error, 'my-bucket')
+        s3.build_symon_exception_from_client_error(error)
 
         mock_logger.error.assert_called_once_with(
             'Amazon S3 ClientError (%s): %s',

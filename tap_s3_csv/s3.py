@@ -71,7 +71,7 @@ def get_aws_error_code(error):
     return aws_error_code
 
 
-def build_symon_exception_from_client_error(error, bucket=None):
+def build_symon_exception_from_client_error(error):
     """Translate S3 ClientErrors to user-safe Symon exceptions; AWS details stay in logs."""
     client_error = find_client_error(error)
     if client_error is None:

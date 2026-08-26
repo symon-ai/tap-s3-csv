@@ -5,7 +5,6 @@ import time
 import traceback
 import boto3
 
-from botocore.exceptions import ClientError
 from singer import metadata
 from tap_s3_csv.discover import discover_streams
 from tap_s3_csv import s3
@@ -287,17 +286,9 @@ def main():
                 do_discover(args.config)
             elif args.properties:
                 do_sync(config, args.properties, args.state)
-        except ClientError as e:
-            if not external_source:
-                raise
-            raise s3.build_symon_exception_from_client_error(
-                e, config.get('bucket')) from e
         except BaseException as e:
-            if external_source:
-                client_error = s3.find_client_error(e)
-                if client_error is not None:
-                    raise s3.build_symon_exception_from_client_error(
-                        client_error, config.get('bucket')) from e
+            if external_source and s3.find_client_error(e) is not None:
+                raise s3.build_symon_exception_from_client_error(e) from e
             raise
     except SymonException as e:
         exc_type, exc_value, exc_traceback = sys.exc_info()
