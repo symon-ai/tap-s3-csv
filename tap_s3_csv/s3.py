@@ -63,22 +63,10 @@ def find_client_error(error):
     return None
 
 
-def get_aws_error_code(error):
-    response = getattr(error, 'response', {})
-    aws_error_code = response.get('Error', {}).get('Code', '')
-    if not aws_error_code:
-        return 'Unknown'
-    return aws_error_code
-
-
-def build_symon_exception_from_client_error(error):
+def build_symon_exception_from_client_error(client_error):
     """Translate S3 ClientErrors to user-safe Symon exceptions; AWS details stay in logs."""
-    client_error = find_client_error(error)
-    if client_error is None:
-        client_error = error
-
-    aws_error_code = get_aws_error_code(client_error)
     aws_error = getattr(client_error, 'response', {}).get('Error', {})
+    aws_error_code = aws_error.get('Code') or 'Unknown'
     aws_error_message = aws_error.get('Message', '')
 
     LOGGER.error(

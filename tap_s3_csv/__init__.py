@@ -286,9 +286,12 @@ def main():
                 do_discover(args.config)
             elif args.properties:
                 do_sync(config, args.properties, args.state)
-        except BaseException as e:
-            if external_source and s3.find_client_error(e) is not None:
-                raise s3.build_symon_exception_from_client_error(e) from e
+        except SymonException:
+            raise
+        except Exception as e:
+            client_error = s3.find_client_error(e) if external_source else None
+            if client_error is not None:
+                raise s3.build_symon_exception_from_client_error(client_error) from e
             raise
     except SymonException as e:
         exc_type, exc_value, exc_traceback = sys.exc_info()

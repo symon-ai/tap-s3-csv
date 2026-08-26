@@ -332,7 +332,9 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
         inner = self._client_error('AccessDenied')
         wrapped = RuntimeError('wrapper')
         wrapped.__cause__ = inner
-        result = s3.build_symon_exception_from_client_error(wrapped)
+        client_error = s3.find_client_error(wrapped)
+        result = s3.build_symon_exception_from_client_error(client_error)
+        self.assertIs(client_error, inner)
         self.assertEqual(result.code, self.GENERIC_CODE)
         self.assertEqual(str(result), self.GENERIC_MESSAGE)
 
@@ -341,7 +343,9 @@ class TestBuildSymonExceptionFromClientError(unittest.TestCase):
         wrapped = RuntimeError('wrapper')
         wrapped.__cause__ = inner
         inner.__context__ = wrapped
-        result = s3.build_symon_exception_from_client_error(wrapped)
+        client_error = s3.find_client_error(wrapped)
+        result = s3.build_symon_exception_from_client_error(client_error)
+        self.assertIs(client_error, inner)
         self.assertEqual(result.code, self.GENERIC_CODE)
 
     @mock.patch('tap_s3_csv.s3.LOGGER')
@@ -448,6 +452,31 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
 
         self.assertEqual(ctx.exception.code, 'amazonS3.requestFailed')
         self.assertIs(ctx.exception.__cause__, wrapped)
+
+    @mock.patch('tap_s3_csv.do_discover')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
+    @mock.patch('singer.utils.parse_args')
+    def test_external_source_preserves_file_not_found_error(
+            self, mock_parse_args, mock_setup_access_key, mock_do_discover):
+        config = {
+            'bucket': 'customer-bucket',
+            'auth_method': 'awsAccessKey',
+            'aws_access_key_id': 'AKIAEXAMPLE',
+            'aws_secret_access_key': 'secret',
+            'tables': _sample_tables(),
+        }
+        mock_parse_args.side_effect = _make_parse_args_side_effect(config)
+        file_not_found = SymonException(
+            'No files matched the configured key.',
+            'amazonS3.FileNotFound',
+        )
+        mock_do_discover.side_effect = file_not_found
+
+        with self.assertRaises(SymonException) as ctx:
+            tap_s3_csv.main()
+
+        self.assertIs(ctx.exception, file_not_found)
+        self.assertEqual(ctx.exception.code, 'amazonS3.FileNotFound')
 
     @mock.patch('tap_s3_csv.do_discover')
     @mock.patch('tap_s3_csv.dialect.detect_tables_dialect')
