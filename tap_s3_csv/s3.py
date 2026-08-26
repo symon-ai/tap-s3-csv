@@ -29,6 +29,7 @@ from tap_s3_csv.symon_exception import SymonException
 
 LOGGER = singer.get_logger()
 
+S3_REQUEST_FAILED_CODE = 'amazonS3.requestFailed'
 S3_REQUEST_FAILED_MESSAGE = 'Amazon S3 request failed.'
 
 skipped_files_count = 0
@@ -71,7 +72,7 @@ def get_aws_error_code(error):
 
 
 def build_symon_exception_from_client_error(error, bucket=None):
-    """Translate S3 ClientErrors to user-safe Symon exceptions with raw AWS codes."""
+    """Translate S3 ClientErrors to user-safe Symon exceptions; AWS details stay in logs."""
     client_error = find_client_error(error)
     if client_error is None:
         client_error = error
@@ -88,7 +89,7 @@ def build_symon_exception_from_client_error(error, bucket=None):
 
     return SymonException(
         S3_REQUEST_FAILED_MESSAGE,
-        aws_error_code,
+        S3_REQUEST_FAILED_CODE,
     )
 
 
