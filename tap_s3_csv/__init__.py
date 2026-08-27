@@ -13,12 +13,11 @@ from tap_s3_csv.sync import sync_stream
 from tap_s3_csv.config import CONFIG_CONTRACT
 from tap_s3_csv import dialect
 from tap_s3_csv import aws_auth
-from tap_s3_csv.aws_auth import AwsAuthMode
 from tap_s3_csv.symon_exception import SymonException
 
 LOGGER = singer.get_logger()
 
-BASE_REQUIRED_CONFIG_KEYS = aws_auth.get_required_config_keys(AwsAuthMode.DEFAULT)
+BASE_REQUIRED_CONFIG_KEYS = aws_auth.get_required_config_keys(None)
 
 IMPORT_PERF_METRICS_LOG_PREFIX = "IMPORT_PERF_METRICS:"
 
@@ -237,20 +236,20 @@ def main():
         args = singer.utils.parse_args(BASE_REQUIRED_CONFIG_KEYS)
         config = args.config
 
-        auth_mode = aws_auth.get_auth_mode(config)
-        required_config_keys = aws_auth.get_required_config_keys(auth_mode)
+        auth_method = aws_auth.resolve_auth_method(config)
+        required_config_keys = aws_auth.get_required_config_keys(auth_method)
         if required_config_keys != BASE_REQUIRED_CONFIG_KEYS:
             args = singer.utils.parse_args(required_config_keys)
             config = args.config
 
-        uses_external_source = auth_mode != AwsAuthMode.DEFAULT
+        uses_external_source = auth_method is not None
 
         config['tables'] = validate_table_config(config)
 
         try:
             if uses_external_source:
                 # Customer-owned external S3 requires the configured customer credentials.
-                if auth_mode == AwsAuthMode.ACCESS_KEY:
+                if auth_method == aws_auth.AUTH_METHOD_ACCESS_KEY:
                     s3.setup_external_source_with_aws_access_key(config)
                 else:
                     s3.setup_external_source_with_aws_role_assumption(config)
