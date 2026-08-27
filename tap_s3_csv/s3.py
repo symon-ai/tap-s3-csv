@@ -143,6 +143,11 @@ def setup_external_source_with_aws_role_assumption(config):
     boto3.setup_default_session(botocore_session=refreshable_session)
 
 
+# Preserve the helper names released by the access-key authentication change.
+setup_aws_access_key_client = setup_external_source_with_aws_access_key
+setup_aws_role_client = setup_external_source_with_aws_role_assumption
+
+
 def get_sampled_schema_for_table(config, table_spec):
     LOGGER.info('Sampling records to determine table schema.')
 
