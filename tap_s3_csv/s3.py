@@ -29,9 +29,6 @@ from tap_s3_csv.symon_exception import SymonException
 
 LOGGER = singer.get_logger()
 
-S3_REQUEST_FAILED_CODE = 'amazonS3.requestFailed'
-S3_REQUEST_FAILED_MESSAGE = 'Amazon S3 request failed.'
-
 skipped_files_count = 0
 
 
@@ -48,37 +45,20 @@ def log_backoff_attempt(details):
         "Error detected communicating with Amazon, triggering backoff: %d try", details.get("tries"))
 
 
-def find_client_error(error):
-    """Find a ClientError in error's cause/context chain."""
-    seen = set()
-    unvisited = [error]
-    while unvisited:
-        current = unvisited.pop()
-        if current is None or id(current) in seen:
-            continue
-        seen.add(id(current))
-        if isinstance(current, ClientError):
-            return current
-        unvisited += [current.__cause__, current.__context__]
-    return None
+def build_symon_exception_from_client_error(error, bucket=None):
+    """Map AccessDenied ClientErrors to SymonException; return other errors unchanged."""
+    aws_error = getattr(error, 'response', {}).get('Error', {})
+    aws_error_code = aws_error.get('Code', '')
 
+    if aws_error_code in ('AccessDenied', 'AccessDeniedException', 'KMSAccessDeniedException'):
+        bucket_ref = f' "{bucket}"' if bucket else ''
+        return SymonException(
+            f'Unable to access bucket{bucket_ref}. Ensure the policy associated with this connection in your AWS '
+            f'account grants the appropriate permissions.',
+            'amazonS3.accessDeniedError'
+        )
 
-def build_symon_exception_from_client_error(client_error):
-    """Translate S3 ClientErrors to user-safe Symon exceptions; AWS details stay in logs."""
-    aws_error = getattr(client_error, 'response', {}).get('Error', {})
-    aws_error_code = aws_error.get('Code') or 'Unknown'
-    aws_error_message = aws_error.get('Message', '')
-
-    LOGGER.error(
-        'Amazon S3 ClientError (%s): %s',
-        aws_error_code,
-        aws_error_message or client_error,
-    )
-
-    return SymonException(
-        S3_REQUEST_FAILED_MESSAGE,
-        S3_REQUEST_FAILED_CODE,
-    )
+    return error
 
 
 class AssumeRoleProvider():
@@ -124,7 +104,7 @@ class InMemoryCache:
             return deepcopy(self._cache[key])
         return default
 
-def setup_external_source_with_aws_access_key(config):
+def setup_aws_access_key_client(config):
     session_kwargs = {
         'aws_access_key_id': config['aws_access_key_id'],
         'aws_secret_access_key': config['aws_secret_access_key'],
@@ -136,8 +116,11 @@ def setup_external_source_with_aws_access_key(config):
     boto3.setup_default_session(**session_kwargs)
 
 
+setup_external_source_with_aws_access_key = setup_aws_access_key_client
+
+
 @retry_pattern()
-def setup_external_source_with_aws_role_assumption(config):
+def setup_aws_role_client(config):
     role_arn = "arn:aws:iam::{}:role/{}".format(config['account_id'].replace('-', ''),
                                                 config['role_name'])
     session = Session()
@@ -161,6 +144,9 @@ def setup_external_source_with_aws_role_assumption(config):
 
     LOGGER.info("Attempting to assume_role on RoleArn: %s", role_arn)
     boto3.setup_default_session(botocore_session=refreshable_session)
+
+
+setup_external_source_with_aws_role_assumption = setup_aws_role_client
 
 
 def get_sampled_schema_for_table(config, table_spec):

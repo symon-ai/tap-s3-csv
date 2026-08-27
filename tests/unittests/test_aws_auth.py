@@ -4,6 +4,8 @@ from unittest import mock
 
 from botocore.exceptions import ClientError
 
+from tap_s3_csv import aws_auth
+from tap_s3_csv.aws_auth import AwsAuthMode, AUTH_METHOD_ACCESS_KEY, AUTH_METHOD_ROLE
 import tap_s3_csv
 from tap_s3_csv import s3
 from tap_s3_csv.symon_exception import SymonException
@@ -31,41 +33,168 @@ def _make_parse_args_side_effect(config):
     return parse_args
 
 
-class TestResolveAuthMethod(unittest.TestCase):
+class TestAwsAuthDetection(unittest.TestCase):
 
-    def test_explicit_auth_method_wins(self):
-        config = {
-            'auth_method': 'awsAccessKey',
-            'external_id': 'legacy-external-id',
-        }
-        self.assertEqual(tap_s3_csv._resolve_auth_method(config), 'awsAccessKey')
-
-    def test_legacy_role_when_auth_method_absent_and_external_id_present(self):
-        config = {'external_id': 'legacy-external-id'}
-        self.assertEqual(tap_s3_csv._resolve_auth_method(config), 'awsRoleAssumption')
-
-    def test_no_auth_preserves_internal_behavior(self):
+    def test_default_mode_when_no_auth_keys(self):
         config = {'bucket': 'my-bucket'}
-        self.assertIsNone(tap_s3_csv._resolve_auth_method(config))
+        self.assertEqual(aws_auth.get_auth_mode(config), AwsAuthMode.DEFAULT)
 
-    def test_access_key_fields_without_auth_method_stay_internal(self):
+    def test_role_mode_when_all_role_keys_present(self):
         config = {
+            'bucket': 'my-bucket',
+            'account_id': '111222333444',
+            'role_name': 'my-role',
+            'external_id': 'external-id',
+        }
+        self.assertEqual(aws_auth.get_auth_mode(config), AwsAuthMode.ROLE)
+
+    def test_access_key_mode_when_required_keys_present(self):
+        config = {
+            'bucket': 'my-bucket',
             'aws_access_key_id': 'AKIAEXAMPLE',
             'aws_secret_access_key': 'secret',
         }
-        self.assertIsNone(tap_s3_csv._resolve_auth_method(config))
+        self.assertEqual(aws_auth.get_auth_mode(config), AwsAuthMode.ACCESS_KEY)
+
+    def test_access_key_mode_with_session_token(self):
+        config = {
+            'bucket': 'my-bucket',
+            'aws_access_key_id': 'AKIAEXAMPLE',
+            'aws_secret_access_key': 'secret',
+            'aws_session_token': 'token',
+        }
+        self.assertEqual(aws_auth.get_auth_mode(config), AwsAuthMode.ACCESS_KEY)
+
+    def test_rejects_mixed_role_and_access_key_config(self):
+        config = {
+            'bucket': 'my-bucket',
+            'account_id': '111222333444',
+            'role_name': 'my-role',
+            'external_id': 'external-id',
+            'aws_access_key_id': 'AKIAEXAMPLE',
+            'aws_secret_access_key': 'secret',
+        }
+        with self.assertRaisesRegex(ValueError, 'not both'):
+            aws_auth.get_auth_mode(config)
+
+    def test_rejects_role_config_with_session_token(self):
+        config = {
+            'bucket': 'my-bucket',
+            'account_id': '111222333444',
+            'role_name': 'my-role',
+            'external_id': 'external-id',
+            'aws_session_token': 'token',
+        }
+        with self.assertRaisesRegex(ValueError, 'not both'):
+            aws_auth.validate_auth_config(config)
+
+    def test_rejects_incomplete_role_config(self):
+        config = {
+            'bucket': 'my-bucket',
+            'external_id': 'external-id',
+        }
+        with self.assertRaisesRegex(ValueError, 'Incomplete role assumption config'):
+            aws_auth.get_auth_mode(config)
+
+    def test_rejects_incomplete_access_key_config(self):
+        config = {
+            'bucket': 'my-bucket',
+            'aws_access_key_id': 'AKIAEXAMPLE',
+        }
+        with self.assertRaisesRegex(ValueError, 'Incomplete access key config'):
+            aws_auth.get_auth_mode(config)
+
+    def test_rejects_session_token_without_access_key_credentials(self):
+        config = {
+            'bucket': 'my-bucket',
+            'aws_session_token': 'token-only',
+        }
+        with self.assertRaisesRegex(ValueError, 'Incomplete access key config'):
+            aws_auth.get_auth_mode(config)
+
+    def test_ignores_empty_optional_session_token(self):
+        config = {
+            'bucket': 'my-bucket',
+            'aws_session_token': '',
+        }
+        self.assertEqual(aws_auth.get_auth_mode(config), AwsAuthMode.DEFAULT)
+
+    def test_treats_empty_strings_as_missing(self):
+        config = {
+            'bucket': 'my-bucket',
+            'aws_access_key_id': 'AKIAEXAMPLE',
+            'aws_secret_access_key': '',
+        }
+        with self.assertRaisesRegex(ValueError, 'Incomplete access key config'):
+            aws_auth.get_auth_mode(config)
+
+    def test_rejects_blank_role_config(self):
+        config = {
+            'bucket': 'my-bucket',
+            'account_id': '',
+            'role_name': '',
+            'external_id': '',
+        }
+        with self.assertRaisesRegex(ValueError, 'Incomplete role assumption config'):
+            aws_auth.get_auth_mode(config)
+
+    def test_get_required_config_keys(self):
+        self.assertEqual(
+            aws_auth.get_required_config_keys(AwsAuthMode.DEFAULT),
+            ['bucket'],
+        )
+        self.assertEqual(
+            aws_auth.get_required_config_keys(AwsAuthMode.ROLE),
+            ['bucket', 'account_id', 'role_name', 'external_id'],
+        )
+        self.assertEqual(
+            aws_auth.get_required_config_keys(AwsAuthMode.ACCESS_KEY),
+            ['bucket', 'aws_access_key_id', 'aws_secret_access_key'],
+        )
+
+
+class TestExplicitAuthMethod(unittest.TestCase):
+
+    def test_explicit_access_key_wins_over_legacy_role_fields(self):
+        config = {
+            'auth_method': AUTH_METHOD_ACCESS_KEY,
+            'aws_access_key_id': 'AKIAEXAMPLE',
+            'aws_secret_access_key': 'secret',
+            'external_id': 'legacy-external-id',
+        }
+        self.assertEqual(aws_auth.get_auth_mode(config), AwsAuthMode.ACCESS_KEY)
+
+    def test_explicit_role_wins_over_access_key_fields(self):
+        config = {
+            'auth_method': AUTH_METHOD_ROLE,
+            'account_id': '111222333444',
+            'role_name': 'my-role',
+            'external_id': 'external-id',
+            'aws_access_key_id': 'AKIAEXAMPLE',
+            'aws_secret_access_key': 'secret',
+        }
+        self.assertEqual(aws_auth.get_auth_mode(config), AwsAuthMode.ROLE)
+
+    def test_explicit_access_key_requires_credentials(self):
+        config = {
+            'auth_method': AUTH_METHOD_ACCESS_KEY,
+            'external_id': 'legacy-external-id',
+        }
+        with self.assertRaisesRegex(ValueError, 'Incomplete access key config'):
+            aws_auth.get_auth_mode(config)
+
+    def test_explicit_role_requires_role_credentials(self):
+        config = {
+            'auth_method': AUTH_METHOD_ROLE,
+            'external_id': 'external-id',
+        }
+        with self.assertRaisesRegex(ValueError, 'Incomplete role assumption config'):
+            aws_auth.get_auth_mode(config)
 
     def test_invalid_auth_method_raises(self):
         config = {'auth_method': 'invalid'}
         with self.assertRaises(ValueError):
-            tap_s3_csv._resolve_auth_method(config)
-
-    def test_explicit_auth_method_ignores_legacy_external_id_fallback(self):
-        config = {
-            'auth_method': 'awsAccessKey',
-            'external_id': 'legacy-external-id',
-        }
-        self.assertEqual(tap_s3_csv._resolve_auth_method(config), 'awsAccessKey')
+            aws_auth.get_auth_mode(config)
 
 
 class TestAuthRouting(unittest.TestCase):
@@ -73,8 +202,8 @@ class TestAuthRouting(unittest.TestCase):
     @mock.patch('tap_s3_csv.do_discover')
     @mock.patch('tap_s3_csv.dialect.detect_tables_dialect')
     @mock.patch('tap_s3_csv.s3.list_files_in_bucket')
-    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_role_assumption')
-    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
+    @mock.patch('tap_s3_csv.s3.setup_aws_role_client')
+    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
     @mock.patch('singer.utils.parse_args')
     def test_default_uses_ambient_credentials(
             self, mock_parse_args, mock_setup_access_key, mock_setup_role,
@@ -95,10 +224,10 @@ class TestAuthRouting(unittest.TestCase):
         mock_do_discover.assert_called_once()
 
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_role_assumption')
-    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
+    @mock.patch('tap_s3_csv.s3.setup_aws_role_client')
+    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
     @mock.patch('singer.utils.parse_args')
-    def test_legacy_external_id_fallback_uses_role_client(
+    def test_field_based_role_config_uses_role_client(
             self, mock_parse_args, mock_setup_access_key, mock_setup_role,
             mock_do_discover):
         config = {
@@ -117,15 +246,15 @@ class TestAuthRouting(unittest.TestCase):
         mock_do_discover.assert_called_once()
 
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_role_assumption')
-    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
+    @mock.patch('tap_s3_csv.s3.setup_aws_role_client')
+    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
     @mock.patch('singer.utils.parse_args')
     def test_explicit_role_assumption_uses_role_client(
             self, mock_parse_args, mock_setup_access_key, mock_setup_role,
             mock_do_discover):
         config = {
             'bucket': 'my-bucket',
-            'auth_method': 'awsRoleAssumption',
+            'auth_method': AUTH_METHOD_ROLE,
             'account_id': '111222333444',
             'role_name': 'my-role',
             'external_id': 'external-id',
@@ -140,15 +269,15 @@ class TestAuthRouting(unittest.TestCase):
         mock_do_discover.assert_called_once()
 
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_role_assumption')
-    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
+    @mock.patch('tap_s3_csv.s3.setup_aws_role_client')
+    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
     @mock.patch('singer.utils.parse_args')
     def test_explicit_access_key_routing(
             self, mock_parse_args, mock_setup_access_key, mock_setup_role,
             mock_do_discover):
         config = {
             'bucket': 'my-bucket',
-            'auth_method': 'awsAccessKey',
+            'auth_method': AUTH_METHOD_ACCESS_KEY,
             'aws_access_key_id': 'AKIAEXAMPLE',
             'aws_secret_access_key': 'secret',
             'tables': _sample_tables(),
@@ -162,14 +291,12 @@ class TestAuthRouting(unittest.TestCase):
         mock_do_discover.assert_called_once()
 
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.dialect.detect_tables_dialect')
-    @mock.patch('tap_s3_csv.s3.list_files_in_bucket')
-    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_role_assumption')
-    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
+    @mock.patch('tap_s3_csv.s3.setup_aws_role_client')
+    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
     @mock.patch('singer.utils.parse_args')
-    def test_access_key_fields_without_auth_method_use_default_path(
+    def test_field_based_access_key_config_uses_access_key_client(
             self, mock_parse_args, mock_setup_access_key, mock_setup_role,
-            mock_list_files, mock_detect_dialect, mock_do_discover):
+            mock_do_discover):
         config = {
             'bucket': 'my-bucket',
             'aws_access_key_id': 'AKIAEXAMPLE',
@@ -177,13 +304,11 @@ class TestAuthRouting(unittest.TestCase):
             'tables': _sample_tables(),
         }
         mock_parse_args.side_effect = _make_parse_args_side_effect(config)
-        mock_list_files.return_value = iter([{'Key': 'file.csv'}])
 
         tap_s3_csv.main()
 
-        mock_setup_access_key.assert_not_called()
         mock_setup_role.assert_not_called()
-        mock_detect_dialect.assert_called_once_with(config)
+        mock_setup_access_key.assert_called_once_with(config)
         mock_do_discover.assert_called_once()
 
 
@@ -195,7 +320,7 @@ class TestSetupAwsAccessKeyClient(unittest.TestCase):
             'aws_access_key_id': 'AKIAEXAMPLE',
             'aws_secret_access_key': 'secret',
         }
-        s3.setup_external_source_with_aws_access_key(config)
+        s3.setup_aws_access_key_client(config)
         mock_setup_session.assert_called_once_with(
             aws_access_key_id='AKIAEXAMPLE',
             aws_secret_access_key='secret',
@@ -208,11 +333,23 @@ class TestSetupAwsAccessKeyClient(unittest.TestCase):
             'aws_secret_access_key': 'secret',
             'aws_session_token': 'token',
         }
-        s3.setup_external_source_with_aws_access_key(config)
+        s3.setup_aws_access_key_client(config)
         mock_setup_session.assert_called_once_with(
             aws_access_key_id='AKIAEXAMPLE',
             aws_secret_access_key='secret',
             aws_session_token='token',
+        )
+
+    @mock.patch('tap_s3_csv.s3.boto3.setup_default_session')
+    def test_alias_setup_external_source_with_aws_access_key(self, mock_setup_session):
+        config = {
+            'aws_access_key_id': 'AKIAEXAMPLE',
+            'aws_secret_access_key': 'secret',
+        }
+        s3.setup_external_source_with_aws_access_key(config)
+        mock_setup_session.assert_called_once_with(
+            aws_access_key_id='AKIAEXAMPLE',
+            aws_secret_access_key='secret',
         )
 
 
@@ -230,7 +367,7 @@ class TestSetupAwsClient(unittest.TestCase):
         mock_session.return_value.create_client = mock.Mock()
         mock_session.return_value.get_credentials = mock.Mock(return_value='creds')
 
-        s3.setup_external_source_with_aws_role_assumption(config)
+        s3.setup_aws_role_client(config)
 
         mock_fetcher.assert_called_once_with(
             mock_session.return_value.create_client,
@@ -245,119 +382,60 @@ class TestSetupAwsClient(unittest.TestCase):
         )
         mock_setup_session.assert_called_once()
 
+    @mock.patch('tap_s3_csv.s3.boto3.setup_default_session')
+    @mock.patch('tap_s3_csv.s3.AssumeRoleCredentialFetcher')
+    @mock.patch('tap_s3_csv.s3.Session')
+    def test_alias_setup_external_source_with_aws_role_assumption(
+            self, mock_session, mock_fetcher, mock_setup_session):
+        config = {
+            'account_id': '111222333444',
+            'role_name': 'my-role',
+            'external_id': 'external-id',
+        }
+        mock_session.return_value.create_client = mock.Mock()
+        mock_session.return_value.get_credentials = mock.Mock(return_value='creds')
+
+        s3.setup_external_source_with_aws_role_assumption(config)
+
+        mock_fetcher.assert_called_once()
+        mock_setup_session.assert_called_once()
+
 
 class TestBuildSymonExceptionFromClientError(unittest.TestCase):
 
-    GENERIC_MESSAGE = 'Amazon S3 request failed.'
-    GENERIC_CODE = 'amazonS3.requestFailed'
-
-    def _client_error(self, code, message='raw aws message', http_status_code=None):
-        response = {
-            'Error': {'Code': code, 'Message': message},
-        }
-        if http_status_code is not None:
-            response['ResponseMetadata'] = {'HTTPStatusCode': http_status_code}
+    def _client_error(self, code, message='denied'):
         return ClientError(
-            response,
+            {'Error': {'Code': code, 'Message': message}},
             'ListObjectsV2',
         )
 
-    def _assert_generic_contract(self, aws_code, aws_message='raw aws message'):
-        error = self._client_error(aws_code, aws_message)
-        result = s3.build_symon_exception_from_client_error(error)
+    def test_maps_access_denied_to_symon_exception(self):
+        error = self._client_error('AccessDenied')
+        result = s3.build_symon_exception_from_client_error(error, 'my-bucket')
         self.assertIsInstance(result, SymonException)
-        self.assertEqual(result.code, self.GENERIC_CODE)
-        self.assertEqual(str(result), self.GENERIC_MESSAGE)
-        self.assertNotIn(aws_message, str(result))
-        self.assertNotIn(aws_code, str(result))
+        self.assertEqual(result.code, 'amazonS3.accessDeniedError')
+        self.assertIn('my-bucket', str(result))
 
-    def test_expired_token_uses_generic_contract(self):
-        self._assert_generic_contract('ExpiredToken')
-
-    def test_invalid_credentials_use_generic_contract(self):
-        for aws_code in ('InvalidToken', 'InvalidAccessKeyId', 'SignatureDoesNotMatch'):
-            with self.subTest(aws_code=aws_code):
-                self._assert_generic_contract(aws_code)
-
-    def test_access_denied_variants_use_generic_contract(self):
+    def test_maps_access_denied_variants_to_symon_exception(self):
         for aws_code in ('AccessDenied', 'AccessDeniedException', 'KMSAccessDeniedException'):
             with self.subTest(aws_code=aws_code):
-                self._assert_generic_contract(aws_code)
-
-    def test_bucket_not_found_uses_generic_contract(self):
-        for aws_code in ('NoSuchBucket', 'NotFound'):
-            with self.subTest(aws_code=aws_code):
-                self._assert_generic_contract(aws_code)
-
-    def test_incorrect_region_uses_generic_contract(self):
-        for aws_code in (
-            'PermanentRedirect',
-            'AuthorizationHeaderMalformed',
-            'IllegalLocationConstraintException',
-        ):
-            with self.subTest(aws_code=aws_code):
-                self._assert_generic_contract(aws_code)
-
-    def test_numeric_http_errors_use_generic_contract(self):
-        for http_status_code in (301, 403, 404):
-            with self.subTest(http_status_code=http_status_code):
-                error = self._client_error(
-                    str(http_status_code),
-                    http_status_code=http_status_code,
-                )
-                result = s3.build_symon_exception_from_client_error(error)
+                error = self._client_error(aws_code)
+                result = s3.build_symon_exception_from_client_error(error, 'my-bucket')
                 self.assertIsInstance(result, SymonException)
-                self.assertEqual(result.code, self.GENERIC_CODE)
-                self.assertEqual(str(result), self.GENERIC_MESSAGE)
+                self.assertEqual(result.code, 'amazonS3.accessDeniedError')
 
-    def test_slow_down_uses_generic_contract(self):
-        self._assert_generic_contract('SlowDown')
-
-    def test_missing_code_uses_generic_contract(self):
-        error = ClientError({'Error': {'Message': 'no code'}}, 'ListObjectsV2')
+    def test_access_denied_without_bucket_omits_bucket_in_message(self):
+        error = self._client_error('AccessDenied')
         result = s3.build_symon_exception_from_client_error(error)
-        self.assertEqual(result.code, self.GENERIC_CODE)
-        self.assertEqual(str(result), self.GENERIC_MESSAGE)
+        self.assertEqual(result.code, 'amazonS3.accessDeniedError')
+        self.assertNotIn('"', str(result))
 
-    def test_empty_code_uses_generic_contract(self):
-        error = self._client_error('')
-        result = s3.build_symon_exception_from_client_error(error)
-        self.assertEqual(result.code, self.GENERIC_CODE)
-        self.assertEqual(str(result), self.GENERIC_MESSAGE)
-
-    def test_unfamiliar_code_uses_generic_contract(self):
-        self._assert_generic_contract('SomeNewAwsErrorCode')
-
-    def test_finds_wrapped_client_error(self):
-        inner = self._client_error('AccessDenied')
-        wrapped = RuntimeError('wrapper')
-        wrapped.__cause__ = inner
-        client_error = s3.find_client_error(wrapped)
-        result = s3.build_symon_exception_from_client_error(client_error)
-        self.assertIs(client_error, inner)
-        self.assertEqual(result.code, self.GENERIC_CODE)
-        self.assertEqual(str(result), self.GENERIC_MESSAGE)
-
-    def test_cycle_safe_wrapped_lookup(self):
-        inner = self._client_error('AccessDenied')
-        wrapped = RuntimeError('wrapper')
-        wrapped.__cause__ = inner
-        inner.__context__ = wrapped
-        client_error = s3.find_client_error(wrapped)
-        result = s3.build_symon_exception_from_client_error(client_error)
-        self.assertIs(client_error, inner)
-        self.assertEqual(result.code, self.GENERIC_CODE)
-
-    @mock.patch('tap_s3_csv.s3.LOGGER')
-    def test_logs_original_aws_error_without_exposing_it(self, mock_logger):
-        error = self._client_error('ExpiredToken', 'The provided token has expired.')
-        s3.build_symon_exception_from_client_error(error)
-
-        mock_logger.error.assert_called_once_with(
-            'Amazon S3 ClientError (%s): %s',
-            'ExpiredToken',
-            'The provided token has expired.',
-        )
+    def test_returns_other_client_errors_unchanged(self):
+        for aws_code in ('NoSuchBucket', 'NotFound', 'ExpiredToken', 'SlowDown'):
+            with self.subTest(aws_code=aws_code):
+                error = self._client_error(aws_code)
+                result = s3.build_symon_exception_from_client_error(error, 'my-bucket')
+                self.assertIs(result, error)
 
 
 class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
@@ -407,13 +485,13 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         self.assertIs(ctx.exception, aws_error)
 
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
+    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
     @mock.patch('singer.utils.parse_args')
-    def test_external_source_translates_client_error_at_main_boundary(
+    def test_external_source_translates_access_denied_at_main_boundary(
             self, mock_parse_args, mock_setup_access_key, mock_do_discover):
         config = {
             'bucket': 'customer-bucket',
-            'auth_method': 'awsAccessKey',
+            'auth_method': AUTH_METHOD_ACCESS_KEY,
             'aws_access_key_id': 'AKIAEXAMPLE',
             'aws_secret_access_key': 'secret',
             'tables': _sample_tables(),
@@ -425,18 +503,39 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         with self.assertRaises(SymonException) as ctx:
             tap_s3_csv.main()
 
-        self.assertEqual(ctx.exception.code, 'amazonS3.requestFailed')
-        self.assertEqual(str(ctx.exception), 'Amazon S3 request failed.')
+        self.assertEqual(ctx.exception.code, 'amazonS3.accessDeniedError')
+        self.assertIn('customer-bucket', str(ctx.exception))
         self.assertIs(ctx.exception.__cause__, aws_error)
 
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
+    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
     @mock.patch('singer.utils.parse_args')
-    def test_external_source_translates_wrapped_client_error_at_main_boundary(
+    def test_external_source_leaves_non_access_denied_client_error_untranslated(
             self, mock_parse_args, mock_setup_access_key, mock_do_discover):
         config = {
             'bucket': 'customer-bucket',
-            'auth_method': 'awsAccessKey',
+            'auth_method': AUTH_METHOD_ACCESS_KEY,
+            'aws_access_key_id': 'AKIAEXAMPLE',
+            'aws_secret_access_key': 'secret',
+            'tables': _sample_tables(),
+        }
+        mock_parse_args.side_effect = _make_parse_args_side_effect(config)
+        aws_error = self._client_error('NoSuchBucket')
+        mock_do_discover.side_effect = aws_error
+
+        with self.assertRaises(ClientError) as ctx:
+            tap_s3_csv.main()
+
+        self.assertIs(ctx.exception, aws_error)
+
+    @mock.patch('tap_s3_csv.do_discover')
+    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
+    @mock.patch('singer.utils.parse_args')
+    def test_external_source_does_not_translate_wrapped_client_error(
+            self, mock_parse_args, mock_setup_access_key, mock_do_discover):
+        config = {
+            'bucket': 'customer-bucket',
+            'auth_method': AUTH_METHOD_ACCESS_KEY,
             'aws_access_key_id': 'AKIAEXAMPLE',
             'aws_secret_access_key': 'secret',
             'tables': _sample_tables(),
@@ -447,20 +546,19 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         wrapped.__cause__ = aws_error
         mock_do_discover.side_effect = wrapped
 
-        with self.assertRaises(SymonException) as ctx:
+        with self.assertRaises(RuntimeError) as ctx:
             tap_s3_csv.main()
 
-        self.assertEqual(ctx.exception.code, 'amazonS3.requestFailed')
-        self.assertIs(ctx.exception.__cause__, wrapped)
+        self.assertIs(ctx.exception, wrapped)
 
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
+    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
     @mock.patch('singer.utils.parse_args')
     def test_external_source_preserves_file_not_found_error(
             self, mock_parse_args, mock_setup_access_key, mock_do_discover):
         config = {
             'bucket': 'customer-bucket',
-            'auth_method': 'awsAccessKey',
+            'auth_method': AUTH_METHOD_ACCESS_KEY,
             'aws_access_key_id': 'AKIAEXAMPLE',
             'aws_secret_access_key': 'secret',
             'tables': _sample_tables(),
@@ -502,28 +600,29 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
 
     @mock.patch('tap_s3_csv.LOGGER')
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
+    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
     @mock.patch('singer.utils.parse_args')
-    def test_tap_error_transport_emits_generic_code(
+    def test_tap_error_transport_emits_access_denied_code(
             self, mock_parse_args, mock_setup_access_key,
             mock_do_discover, mock_logger):
         config = {
             'bucket': 'customer-bucket',
-            'auth_method': 'awsAccessKey',
+            'auth_method': AUTH_METHOD_ACCESS_KEY,
             'aws_access_key_id': 'AKIAEXAMPLE',
             'aws_secret_access_key': 'secret',
             'tables': _sample_tables(),
         }
         mock_parse_args.side_effect = _make_parse_args_side_effect(config)
         mock_do_discover.side_effect = SymonException(
-            'Amazon S3 request failed.',
-            'amazonS3.requestFailed',
+            'Unable to access bucket "customer-bucket". Ensure the policy associated with this connection in your AWS '
+            'account grants the appropriate permissions.',
+            'amazonS3.accessDeniedError',
         )
 
         with self.assertRaises(SymonException) as ctx:
             tap_s3_csv.main()
 
-        self.assertEqual(ctx.exception.code, 'amazonS3.requestFailed')
+        self.assertEqual(ctx.exception.code, 'amazonS3.accessDeniedError')
         logged_payloads = [
             call.args[0]
             for call in mock_logger.info.call_args_list
@@ -533,5 +632,4 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         error_info = json.loads(
             logged_payloads[0][len(tap_s3_csv.ERROR_START_MARKER):-len(tap_s3_csv.ERROR_END_MARKER)]
         )
-        self.assertEqual(error_info['code'], 'amazonS3.requestFailed')
-        self.assertNotIn('The provided token has expired.', error_info['message'])
+        self.assertEqual(error_info['code'], 'amazonS3.accessDeniedError')

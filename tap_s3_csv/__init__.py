@@ -5,41 +5,26 @@ import time
 import traceback
 import boto3
 
+from botocore.exceptions import ClientError
 from singer import metadata
 from tap_s3_csv.discover import discover_streams
 from tap_s3_csv import s3
 from tap_s3_csv.sync import sync_stream
 from tap_s3_csv.config import CONFIG_CONTRACT
 from tap_s3_csv import dialect
+from tap_s3_csv import aws_auth
+from tap_s3_csv.aws_auth import AwsAuthMode
 from tap_s3_csv.symon_exception import SymonException
 
 LOGGER = singer.get_logger()
 
-REQUIRED_CONFIG_KEYS = ["bucket"]
-ROLE_REQUIRED_CONFIG_KEYS = [
-    "bucket", "account_id", "external_id", "role_name"]
-ACCESS_KEY_REQUIRED_CONFIG_KEYS = [
-    "bucket", "aws_access_key_id", "aws_secret_access_key"]
-AUTH_METHOD_ROLE = 'awsRoleAssumption'
-AUTH_METHOD_ACCESS_KEY = 'awsAccessKey'
+REQUIRED_CONFIG_KEYS = aws_auth.get_required_config_keys(AwsAuthMode.DEFAULT)
 
 IMPORT_PERF_METRICS_LOG_PREFIX = "IMPORT_PERF_METRICS:"
 
 # for symon error logging
 ERROR_START_MARKER = '[tap_error_start]'
 ERROR_END_MARKER = '[tap_error_end]'
-
-
-def _resolve_auth_method(config):
-    auth_method = config.get('auth_method')
-    if auth_method is not None:
-        if auth_method not in (AUTH_METHOD_ACCESS_KEY, AUTH_METHOD_ROLE):
-            raise ValueError(
-                f'Unsupported auth_method {auth_method!r}. '
-                f'Must be {AUTH_METHOD_ACCESS_KEY!r} or {AUTH_METHOD_ROLE!r}.'
-            )
-        return auth_method
-    return AUTH_METHOD_ROLE if 'external_id' in config else None
 
 
 def _count_singer_col_types(schema: dict) -> tuple:
@@ -252,26 +237,22 @@ def main():
         args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS)
         config = args.config
 
-        external_source = False
-        auth_method = _resolve_auth_method(config)
+        auth_mode = aws_auth.get_auth_mode(config)
+        required_config_keys = aws_auth.get_required_config_keys(auth_mode)
+        if required_config_keys != REQUIRED_CONFIG_KEYS:
+            args = singer.utils.parse_args(required_config_keys)
+            config = args.config
 
-        if auth_method == AUTH_METHOD_ACCESS_KEY:
-            args = singer.utils.parse_args(ACCESS_KEY_REQUIRED_CONFIG_KEYS)
-            config = args.config
-            external_source = True
-        elif auth_method == AUTH_METHOD_ROLE:
-            args = singer.utils.parse_args(ROLE_REQUIRED_CONFIG_KEYS)
-            config = args.config
-            external_source = True
+        uses_customer_credentials = auth_mode != AwsAuthMode.DEFAULT
 
         config['tables'] = validate_table_config(config)
 
         try:
-            if external_source:
-                if auth_method == AUTH_METHOD_ACCESS_KEY:
-                    s3.setup_external_source_with_aws_access_key(config)
+            if uses_customer_credentials:
+                if auth_mode == AwsAuthMode.ACCESS_KEY:
+                    s3.setup_aws_access_key_client(config)
                 else:
-                    s3.setup_external_source_with_aws_role_assumption(config)
+                    s3.setup_aws_role_client(config)
             # Otherwise, confirm that we can access the bucket in our own AWS account
             else:
                 try:
@@ -286,13 +267,10 @@ def main():
                 do_discover(args.config)
             elif args.properties:
                 do_sync(config, args.properties, args.state)
-        except SymonException:
-            raise
-        except Exception as e:
-            client_error = s3.find_client_error(e) if external_source else None
-            if client_error is not None:
-                raise s3.build_symon_exception_from_client_error(client_error) from e
-            raise
+        except ClientError as e:
+            if not uses_customer_credentials:
+                raise
+            raise s3.build_symon_exception_from_client_error(e, config.get('bucket')) from e
     except SymonException as e:
         exc_type, exc_value, exc_traceback = sys.exc_info()
         error_info = {
