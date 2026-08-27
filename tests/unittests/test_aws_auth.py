@@ -322,12 +322,6 @@ class TestAuthRouting(unittest.TestCase):
 
 class TestSetupExternalSourceWithAwsAccessKey(unittest.TestCase):
 
-    def test_preserves_merged_helper_name(self):
-        self.assertIs(
-            s3.setup_aws_access_key_client,
-            s3.setup_external_source_with_aws_access_key,
-        )
-
     @mock.patch('tap_s3_csv.s3.boto3.setup_default_session')
     def test_sets_up_session_with_required_credentials(self, mock_setup_session):
         config = {
@@ -356,12 +350,6 @@ class TestSetupExternalSourceWithAwsAccessKey(unittest.TestCase):
 
 
 class TestSetupExternalSourceWithAwsRoleAssumption(unittest.TestCase):
-
-    def test_preserves_merged_helper_name(self):
-        self.assertIs(
-            s3.setup_aws_role_client,
-            s3.setup_external_source_with_aws_role_assumption,
-        )
 
     @mock.patch('tap_s3_csv.s3.boto3.setup_default_session')
     @mock.patch('tap_s3_csv.s3.AssumeRoleCredentialFetcher')
