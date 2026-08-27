@@ -5,10 +5,6 @@ ACCESS_KEY_OPTIONAL_CONFIG_KEYS = ('aws_session_token',)
 
 AUTH_METHOD_ROLE = 'awsRoleAssumption'
 AUTH_METHOD_ACCESS_KEY = 's3Credentials'
-AUTH_CONFIG = {
-    AUTH_METHOD_ROLE: (ROLE_REQUIRED_CONFIG_KEYS, 'role assumption'),
-    AUTH_METHOD_ACCESS_KEY: (ACCESS_KEY_REQUIRED_CONFIG_KEYS, 'access key'),
-}
 
 
 def _has_non_empty_value(config, keys):
@@ -22,13 +18,14 @@ def _missing_keys(config, keys):
 def _get_auth_config(auth_method):
     if auth_method is None:
         return (), None
-    try:
-        return AUTH_CONFIG[auth_method]
-    except KeyError as error:
-        raise ValueError(
-            f'Unsupported auth_method {auth_method!r}. '
-            f'Must be {AUTH_METHOD_ACCESS_KEY!r} or {AUTH_METHOD_ROLE!r}.'
-        ) from error
+    if auth_method == AUTH_METHOD_ROLE:
+        return ROLE_REQUIRED_CONFIG_KEYS, 'role assumption'
+    if auth_method == AUTH_METHOD_ACCESS_KEY:
+        return ACCESS_KEY_REQUIRED_CONFIG_KEYS, 'access key'
+    raise ValueError(
+        f'Unsupported auth_method {auth_method!r}. '
+        f'Must be {AUTH_METHOD_ACCESS_KEY!r} or {AUTH_METHOD_ROLE!r}.'
+    )
 
 
 def resolve_auth_method(config):
