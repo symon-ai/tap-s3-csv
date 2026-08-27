@@ -104,7 +104,7 @@ class InMemoryCache:
             return deepcopy(self._cache[key])
         return default
 
-def setup_aws_access_key_client(config):
+def setup_external_source_with_aws_access_key(config):
     session_kwargs = {
         'aws_access_key_id': config['aws_access_key_id'],
         'aws_secret_access_key': config['aws_secret_access_key'],
@@ -116,11 +116,8 @@ def setup_aws_access_key_client(config):
     boto3.setup_default_session(**session_kwargs)
 
 
-setup_external_source_with_aws_access_key = setup_aws_access_key_client
-
-
 @retry_pattern()
-def setup_aws_role_client(config):
+def setup_external_source_with_aws_role_assumption(config):
     role_arn = "arn:aws:iam::{}:role/{}".format(config['account_id'].replace('-', ''),
                                                 config['role_name'])
     session = Session()
@@ -144,9 +141,6 @@ def setup_aws_role_client(config):
 
     LOGGER.info("Attempting to assume_role on RoleArn: %s", role_arn)
     boto3.setup_default_session(botocore_session=refreshable_session)
-
-
-setup_external_source_with_aws_role_assumption = setup_aws_role_client
 
 
 def get_sampled_schema_for_table(config, table_spec):

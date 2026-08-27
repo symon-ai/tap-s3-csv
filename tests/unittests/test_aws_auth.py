@@ -205,8 +205,8 @@ class TestAuthRouting(unittest.TestCase):
     @mock.patch('tap_s3_csv.do_discover')
     @mock.patch('tap_s3_csv.dialect.detect_tables_dialect')
     @mock.patch('tap_s3_csv.s3.list_files_in_bucket')
-    @mock.patch('tap_s3_csv.s3.setup_aws_role_client')
-    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_role_assumption')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
     @mock.patch('singer.utils.parse_args')
     def test_default_uses_ambient_credentials(
             self, mock_parse_args, mock_setup_access_key, mock_setup_role,
@@ -227,8 +227,8 @@ class TestAuthRouting(unittest.TestCase):
         mock_do_discover.assert_called_once()
 
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_aws_role_client')
-    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_role_assumption')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
     @mock.patch('singer.utils.parse_args')
     def test_field_based_role_config_uses_role_client(
             self, mock_parse_args, mock_setup_access_key, mock_setup_role,
@@ -249,8 +249,8 @@ class TestAuthRouting(unittest.TestCase):
         mock_do_discover.assert_called_once()
 
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_aws_role_client')
-    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_role_assumption')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
     @mock.patch('singer.utils.parse_args')
     def test_explicit_role_assumption_uses_role_client(
             self, mock_parse_args, mock_setup_access_key, mock_setup_role,
@@ -272,8 +272,8 @@ class TestAuthRouting(unittest.TestCase):
         mock_do_discover.assert_called_once()
 
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_aws_role_client')
-    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_role_assumption')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
     @mock.patch('singer.utils.parse_args')
     def test_explicit_access_key_routing(
             self, mock_parse_args, mock_setup_access_key, mock_setup_role,
@@ -294,8 +294,8 @@ class TestAuthRouting(unittest.TestCase):
         mock_do_discover.assert_called_once()
 
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_aws_role_client')
-    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_role_assumption')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
     @mock.patch('singer.utils.parse_args')
     def test_field_based_access_key_config_uses_access_key_client(
             self, mock_parse_args, mock_setup_access_key, mock_setup_role,
@@ -315,7 +315,7 @@ class TestAuthRouting(unittest.TestCase):
         mock_do_discover.assert_called_once()
 
 
-class TestSetupAwsAccessKeyClient(unittest.TestCase):
+class TestSetupExternalSourceWithAwsAccessKey(unittest.TestCase):
 
     @mock.patch('tap_s3_csv.s3.boto3.setup_default_session')
     def test_sets_up_session_with_required_credentials(self, mock_setup_session):
@@ -323,7 +323,7 @@ class TestSetupAwsAccessKeyClient(unittest.TestCase):
             'aws_access_key_id': 'AKIAEXAMPLE',
             'aws_secret_access_key': 'secret',
         }
-        s3.setup_aws_access_key_client(config)
+        s3.setup_external_source_with_aws_access_key(config)
         mock_setup_session.assert_called_once_with(
             aws_access_key_id='AKIAEXAMPLE',
             aws_secret_access_key='secret',
@@ -336,27 +336,15 @@ class TestSetupAwsAccessKeyClient(unittest.TestCase):
             'aws_secret_access_key': 'secret',
             'aws_session_token': 'token',
         }
-        s3.setup_aws_access_key_client(config)
+        s3.setup_external_source_with_aws_access_key(config)
         mock_setup_session.assert_called_once_with(
             aws_access_key_id='AKIAEXAMPLE',
             aws_secret_access_key='secret',
             aws_session_token='token',
         )
 
-    @mock.patch('tap_s3_csv.s3.boto3.setup_default_session')
-    def test_alias_setup_external_source_with_aws_access_key(self, mock_setup_session):
-        config = {
-            'aws_access_key_id': 'AKIAEXAMPLE',
-            'aws_secret_access_key': 'secret',
-        }
-        s3.setup_external_source_with_aws_access_key(config)
-        mock_setup_session.assert_called_once_with(
-            aws_access_key_id='AKIAEXAMPLE',
-            aws_secret_access_key='secret',
-        )
 
-
-class TestSetupAwsClient(unittest.TestCase):
+class TestSetupExternalSourceWithAwsRoleAssumption(unittest.TestCase):
 
     @mock.patch('tap_s3_csv.s3.boto3.setup_default_session')
     @mock.patch('tap_s3_csv.s3.AssumeRoleCredentialFetcher')
@@ -370,7 +358,7 @@ class TestSetupAwsClient(unittest.TestCase):
         mock_session.return_value.create_client = mock.Mock()
         mock_session.return_value.get_credentials = mock.Mock(return_value='creds')
 
-        s3.setup_aws_role_client(config)
+        s3.setup_external_source_with_aws_role_assumption(config)
 
         mock_fetcher.assert_called_once_with(
             mock_session.return_value.create_client,
@@ -383,24 +371,6 @@ class TestSetupAwsClient(unittest.TestCase):
             },
             cache=mock.ANY,
         )
-        mock_setup_session.assert_called_once()
-
-    @mock.patch('tap_s3_csv.s3.boto3.setup_default_session')
-    @mock.patch('tap_s3_csv.s3.AssumeRoleCredentialFetcher')
-    @mock.patch('tap_s3_csv.s3.Session')
-    def test_alias_setup_external_source_with_aws_role_assumption(
-            self, mock_session, mock_fetcher, mock_setup_session):
-        config = {
-            'account_id': '111222333444',
-            'role_name': 'my-role',
-            'external_id': 'external-id',
-        }
-        mock_session.return_value.create_client = mock.Mock()
-        mock_session.return_value.get_credentials = mock.Mock(return_value='creds')
-
-        s3.setup_external_source_with_aws_role_assumption(config)
-
-        mock_fetcher.assert_called_once()
         mock_setup_session.assert_called_once()
 
 
@@ -488,7 +458,7 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         self.assertIs(ctx.exception, aws_error)
 
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
     @mock.patch('singer.utils.parse_args')
     def test_external_source_translates_access_denied_at_main_boundary(
             self, mock_parse_args, mock_setup_access_key, mock_do_discover):
@@ -511,7 +481,7 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         self.assertIs(ctx.exception.__cause__, aws_error)
 
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
     @mock.patch('singer.utils.parse_args')
     def test_external_source_leaves_non_access_denied_client_error_untranslated(
             self, mock_parse_args, mock_setup_access_key, mock_do_discover):
@@ -532,7 +502,7 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         self.assertIs(ctx.exception, aws_error)
 
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
     @mock.patch('singer.utils.parse_args')
     def test_external_source_does_not_translate_wrapped_client_error(
             self, mock_parse_args, mock_setup_access_key, mock_do_discover):
@@ -555,7 +525,7 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
         self.assertIs(ctx.exception, wrapped)
 
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
     @mock.patch('singer.utils.parse_args')
     def test_external_source_preserves_file_not_found_error(
             self, mock_parse_args, mock_setup_access_key, mock_do_discover):
@@ -603,7 +573,7 @@ class TestS3ClientErrorTranslationBoundaries(unittest.TestCase):
 
     @mock.patch('tap_s3_csv.LOGGER')
     @mock.patch('tap_s3_csv.do_discover')
-    @mock.patch('tap_s3_csv.s3.setup_aws_access_key_client')
+    @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
     @mock.patch('singer.utils.parse_args')
     def test_tap_error_transport_emits_access_denied_code(
             self, mock_parse_args, mock_setup_access_key,

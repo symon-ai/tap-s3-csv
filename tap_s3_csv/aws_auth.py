@@ -27,7 +27,7 @@ def _missing_keys(config, keys):
     return [key for key in keys if config.get(key) in (None, '')]
 
 
-def _get_explicit_auth_mode(config):
+def resolve_auth_method(config):
     auth_method = config.get('auth_method')
     if auth_method is None:
         return None
@@ -98,7 +98,7 @@ def validate_auth_config(config):
 
 def get_auth_mode(config):
     """Validate config and return the selected AWS authentication mode."""
-    explicit_mode = _get_explicit_auth_mode(config)
+    explicit_mode = resolve_auth_method(config)
     if explicit_mode is not None:
         _validate_mode_keys(config, explicit_mode)
         return explicit_mode
