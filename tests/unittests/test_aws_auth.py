@@ -155,6 +155,9 @@ class TestAwsAuthDetection(unittest.TestCase):
 
 class TestExplicitAuthMethod(unittest.TestCase):
 
+    def test_access_key_auth_method_matches_s3_credentials_type(self):
+        self.assertEqual(AUTH_METHOD_ACCESS_KEY, 's3Credentials')
+
     def test_explicit_access_key_wins_over_legacy_role_fields(self):
         config = {
             'auth_method': AUTH_METHOD_ACCESS_KEY,
