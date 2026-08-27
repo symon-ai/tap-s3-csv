@@ -6,7 +6,7 @@ ACCESS_KEY_REQUIRED_CONFIG_KEYS = ('aws_access_key_id', 'aws_secret_access_key')
 ACCESS_KEY_OPTIONAL_CONFIG_KEYS = ('aws_session_token',)
 
 AUTH_METHOD_ROLE = 'awsRoleAssumption'
-AUTH_METHOD_ACCESS_KEY = 'awsAccessKey'
+AUTH_METHOD_ACCESS_KEY = 's3Credentials'
 
 
 class AwsAuthMode(Enum):
