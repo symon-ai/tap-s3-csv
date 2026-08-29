@@ -4,6 +4,12 @@ import sys
 import random
 import datetime
 
+# CWE-331: rebind the module-level name to an os.urandom-backed CSPRNG so every
+# random.* fixture call below uses a cryptographically secure generator instead
+# of the default insufficient-entropy PRNG. SystemRandom exposes the same
+# randint/random/uniform API, so no call sites change.
+random = random.SystemRandom()
+
 MAX_POS_DOUBLE = 1.7976931348623157E+308
 MAX_POS_FLOAT = 3.402823466E+38
 MAX_NEG_DOUBLE = -1.7976931348623157E+308
