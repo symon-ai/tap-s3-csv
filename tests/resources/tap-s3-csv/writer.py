@@ -1,8 +1,14 @@
 import csv
 import itertools
 import sys
-import random
+import random as _random
 import datetime
+
+# CWE-331: use a cryptographically-secure RNG (SystemRandom draws from
+# os.urandom) instead of the default Mersenne-Twister PRNG. SystemRandom
+# exposes the same .random()/.randint()/.uniform() call surface, so every
+# existing call site below is unchanged.
+random = _random.SystemRandom()
 
 MAX_POS_DOUBLE = 1.7976931348623157E+308
 MAX_POS_FLOAT = 3.402823466E+38
