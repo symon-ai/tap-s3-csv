@@ -2,6 +2,7 @@ import csv
 import itertools
 import sys
 import random
+random = random.SystemRandom()  # CWE-331: draw from an os.urandom-backed CSPRNG
 import datetime
 
 MAX_POS_DOUBLE = 1.7976931348623157E+308
