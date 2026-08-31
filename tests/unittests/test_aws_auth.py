@@ -8,6 +8,10 @@ from tap_s3_csv.aws_auth import AwsAuthMode
 from tap_s3_csv import s3
 from tap_s3_csv.symon_exception import SymonException
 
+AWS_ACCESS_KEY_ID = mock.sentinel.aws_access_key_id
+AWS_SECRET_ACCESS_KEY = mock.sentinel.aws_secret_access_key
+AWS_SESSION_TOKEN = mock.sentinel.aws_session_token
+
 
 class TestAwsAuthDetection(unittest.TestCase):
 
@@ -27,17 +31,17 @@ class TestAwsAuthDetection(unittest.TestCase):
     def test_access_key_mode_when_required_keys_present(self):
         config = {
             'bucket': 'my-bucket',
-            'aws_access_key_id': 'AKIAEXAMPLE',
-            'aws_secret_access_key': 'secret',
+            'aws_access_key_id': AWS_ACCESS_KEY_ID,
+            'aws_secret_access_key': AWS_SECRET_ACCESS_KEY,
         }
         self.assertEqual(aws_auth.get_auth_mode(config), AwsAuthMode.ACCESS_KEY)
 
     def test_access_key_mode_with_session_token(self):
         config = {
             'bucket': 'my-bucket',
-            'aws_access_key_id': 'AKIAEXAMPLE',
-            'aws_secret_access_key': 'secret',
-            'aws_session_token': 'token',
+            'aws_access_key_id': AWS_ACCESS_KEY_ID,
+            'aws_secret_access_key': AWS_SECRET_ACCESS_KEY,
+            'aws_session_token': AWS_SESSION_TOKEN,
         }
         self.assertEqual(aws_auth.get_auth_mode(config), AwsAuthMode.ACCESS_KEY)
 
@@ -47,8 +51,8 @@ class TestAwsAuthDetection(unittest.TestCase):
             'account_id': '111222333444',
             'role_name': 'my-role',
             'external_id': 'external-id',
-            'aws_access_key_id': 'AKIAEXAMPLE',
-            'aws_secret_access_key': 'secret',
+            'aws_access_key_id': AWS_ACCESS_KEY_ID,
+            'aws_secret_access_key': AWS_SECRET_ACCESS_KEY,
         }
         with self.assertRaisesRegex(ValueError, 'not both'):
             aws_auth.get_auth_mode(config)
@@ -59,7 +63,7 @@ class TestAwsAuthDetection(unittest.TestCase):
             'account_id': '111222333444',
             'role_name': 'my-role',
             'external_id': 'external-id',
-            'aws_session_token': 'token',
+            'aws_session_token': AWS_SESSION_TOKEN,
         }
         with self.assertRaisesRegex(ValueError, 'not both'):
             aws_auth.validate_auth_config(config)
@@ -75,7 +79,7 @@ class TestAwsAuthDetection(unittest.TestCase):
     def test_rejects_incomplete_access_key_config(self):
         config = {
             'bucket': 'my-bucket',
-            'aws_access_key_id': 'AKIAEXAMPLE',
+            'aws_access_key_id': AWS_ACCESS_KEY_ID,
         }
         with self.assertRaisesRegex(ValueError, 'Incomplete access key config'):
             aws_auth.get_auth_mode(config)
@@ -83,7 +87,7 @@ class TestAwsAuthDetection(unittest.TestCase):
     def test_rejects_session_token_without_access_key_credentials(self):
         config = {
             'bucket': 'my-bucket',
-            'aws_session_token': 'token-only',
+            'aws_session_token': AWS_SESSION_TOKEN,
         }
         with self.assertRaisesRegex(ValueError, 'Incomplete access key config'):
             aws_auth.get_auth_mode(config)
@@ -98,7 +102,7 @@ class TestAwsAuthDetection(unittest.TestCase):
     def test_treats_empty_strings_as_missing(self):
         config = {
             'bucket': 'my-bucket',
-            'aws_access_key_id': 'AKIAEXAMPLE',
+            'aws_access_key_id': AWS_ACCESS_KEY_ID,
             'aws_secret_access_key': '',
         }
         with self.assertRaisesRegex(ValueError, 'Incomplete access key config'):
@@ -134,27 +138,27 @@ class TestSetupAwsAccessKeyClient(unittest.TestCase):
     @mock.patch('tap_s3_csv.s3.boto3.setup_default_session')
     def test_sets_up_session_with_required_credentials(self, mock_setup_session):
         config = {
-            'aws_access_key_id': 'AKIAEXAMPLE',
-            'aws_secret_access_key': 'secret',
+            'aws_access_key_id': AWS_ACCESS_KEY_ID,
+            'aws_secret_access_key': AWS_SECRET_ACCESS_KEY,
         }
         s3.setup_aws_access_key_client(config)
         mock_setup_session.assert_called_once_with(
-            aws_access_key_id='AKIAEXAMPLE',
-            aws_secret_access_key='secret',
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
         )
 
     @mock.patch('tap_s3_csv.s3.boto3.setup_default_session')
     def test_sets_up_session_with_session_token(self, mock_setup_session):
         config = {
-            'aws_access_key_id': 'AKIAEXAMPLE',
-            'aws_secret_access_key': 'secret',
-            'aws_session_token': 'token',
+            'aws_access_key_id': AWS_ACCESS_KEY_ID,
+            'aws_secret_access_key': AWS_SECRET_ACCESS_KEY,
+            'aws_session_token': AWS_SESSION_TOKEN,
         }
         s3.setup_aws_access_key_client(config)
         mock_setup_session.assert_called_once_with(
-            aws_access_key_id='AKIAEXAMPLE',
-            aws_secret_access_key='secret',
-            aws_session_token='token',
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+            aws_session_token=AWS_SESSION_TOKEN,
         )
 
 
