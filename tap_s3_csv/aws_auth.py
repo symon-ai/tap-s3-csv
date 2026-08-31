@@ -29,31 +29,24 @@ def _get_auth_config(auth_method):
 
 
 def resolve_auth_method(config):
-    """Validate config and return its auth method, or None for internal S3."""
+    """Return the configured auth method, or None for internal S3."""
     auth_method = config.get('auth_method')
-    if auth_method is None:
-        role_has_values = _has_non_empty_value(
-            config, ROLE_REQUIRED_CONFIG_KEYS)
-        access_key_has_values = _has_non_empty_value(
+    if auth_method is None and 'external_id' in config:
+        auth_method = AUTH_METHOD_ROLE
+    _get_auth_config(auth_method)
+    return auth_method
+
+
+def validate_auth_config(config, auth_method):
+    """Validate the required values for the selected auth method."""
+    if auth_method is None and _has_non_empty_value(
             config,
-            ACCESS_KEY_REQUIRED_CONFIG_KEYS + ACCESS_KEY_OPTIONAL_CONFIG_KEYS,
+            ROLE_REQUIRED_CONFIG_KEYS
+            + ACCESS_KEY_REQUIRED_CONFIG_KEYS
+            + ACCESS_KEY_OPTIONAL_CONFIG_KEYS):
+        raise ValueError(
+            'auth_method is required when AWS authentication credentials are provided.'
         )
-
-        if role_has_values and access_key_has_values:
-            raise ValueError(
-                'AWS authentication config must use either role assumption '
-                '(account_id, role_name, external_id) or access key credentials '
-                '(aws_access_key_id, aws_secret_access_key), not both.'
-            )
-
-        if role_has_values or any(
-                key in config for key in ROLE_REQUIRED_CONFIG_KEYS):
-            auth_method = AUTH_METHOD_ROLE
-        elif access_key_has_values or any(
-                key in config for key in ACCESS_KEY_REQUIRED_CONFIG_KEYS):
-            auth_method = AUTH_METHOD_ACCESS_KEY
-        else:
-            return None
 
     required_keys, auth_label = _get_auth_config(auth_method)
     missing_keys = _missing_keys(config, required_keys)
@@ -62,7 +55,6 @@ def resolve_auth_method(config):
             f'Incomplete {auth_label} config. '
             f'Missing required keys: {", ".join(missing_keys)}'
         )
-    return auth_method
 
 
 def get_required_config_keys(auth_method):

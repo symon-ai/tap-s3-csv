@@ -237,6 +237,7 @@ def main():
         config = args.config
 
         auth_method = aws_auth.resolve_auth_method(config)
+        aws_auth.validate_auth_config(config, auth_method)
         required_config_keys = aws_auth.get_required_config_keys(auth_method)
         if required_config_keys != BASE_REQUIRED_CONFIG_KEYS:
             args = singer.utils.parse_args(required_config_keys)

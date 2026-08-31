@@ -35,11 +35,11 @@ def _make_parse_args_side_effect(config):
 
 class TestAwsAuthResolution(unittest.TestCase):
 
-    def test_default_mode_when_no_auth_keys(self):
+    def test_returns_none_when_no_auth_method(self):
         config = {'bucket': 'my-bucket'}
         self.assertIsNone(aws_auth.resolve_auth_method(config))
 
-    def test_role_mode_when_all_role_keys_present(self):
+    def test_legacy_external_id_resolves_role_method(self):
         config = {
             'bucket': 'my-bucket',
             'account_id': '111222333444',
@@ -49,97 +49,106 @@ class TestAwsAuthResolution(unittest.TestCase):
         self.assertEqual(
             aws_auth.resolve_auth_method(config), AUTH_METHOD_ROLE)
 
-    def test_access_key_mode_when_required_keys_present(self):
+    def test_returns_explicit_role_method(self):
         config = {
-            'bucket': 'my-bucket',
-            'aws_access_key_id': 'AKIAEXAMPLE',
-            'aws_secret_access_key': 'secret',
+            'auth_method': AUTH_METHOD_ROLE,
+        }
+        self.assertEqual(
+            aws_auth.resolve_auth_method(config), AUTH_METHOD_ROLE)
+
+    def test_returns_explicit_access_key_method(self):
+        config = {
+            'auth_method': AUTH_METHOD_ACCESS_KEY,
         }
         self.assertEqual(
             aws_auth.resolve_auth_method(config), AUTH_METHOD_ACCESS_KEY)
 
-    def test_access_key_mode_with_session_token(self):
-        config = {
-            'bucket': 'my-bucket',
-            'aws_access_key_id': 'AKIAEXAMPLE',
-            'aws_secret_access_key': 'secret',
-            'aws_session_token': 'token',
-        }
-        self.assertEqual(
-            aws_auth.resolve_auth_method(config), AUTH_METHOD_ACCESS_KEY)
+    def test_invalid_auth_method_raises(self):
+        config = {'auth_method': 'invalid'}
+        with self.assertRaises(ValueError):
+            aws_auth.resolve_auth_method(config)
 
-    def test_rejects_mixed_role_and_access_key_config(self):
+    def test_validation_accepts_legacy_role_credentials(self):
         config = {
             'bucket': 'my-bucket',
             'account_id': '111222333444',
             'role_name': 'my-role',
             'external_id': 'external-id',
+        }
+        auth_method = aws_auth.resolve_auth_method(config)
+        aws_auth.validate_auth_config(config, auth_method)
+        self.assertEqual(auth_method, AUTH_METHOD_ROLE)
+
+    def test_validation_rejects_access_credentials_without_auth_method(self):
+        config = {
+            'bucket': 'my-bucket',
             'aws_access_key_id': 'AKIAEXAMPLE',
             'aws_secret_access_key': 'secret',
         }
-        with self.assertRaisesRegex(ValueError, 'not both'):
-            aws_auth.resolve_auth_method(config)
-
-    def test_rejects_role_config_with_session_token(self):
-        config = {
-            'bucket': 'my-bucket',
-            'account_id': '111222333444',
-            'role_name': 'my-role',
-            'external_id': 'external-id',
-            'aws_session_token': 'token',
-        }
-        with self.assertRaisesRegex(ValueError, 'not both'):
-            aws_auth.resolve_auth_method(config)
+        auth_method = aws_auth.resolve_auth_method(config)
+        with self.assertRaisesRegex(ValueError, 'auth_method is required'):
+            aws_auth.validate_auth_config(config, auth_method)
 
     def test_rejects_incomplete_role_config(self):
         config = {
             'bucket': 'my-bucket',
             'external_id': 'external-id',
         }
+        auth_method = aws_auth.resolve_auth_method(config)
         with self.assertRaisesRegex(ValueError, 'Incomplete role assumption config'):
-            aws_auth.resolve_auth_method(config)
+            aws_auth.validate_auth_config(config, auth_method)
 
     def test_rejects_incomplete_access_key_config(self):
         config = {
             'bucket': 'my-bucket',
+            'auth_method': AUTH_METHOD_ACCESS_KEY,
             'aws_access_key_id': 'AKIAEXAMPLE',
         }
+        auth_method = aws_auth.resolve_auth_method(config)
         with self.assertRaisesRegex(ValueError, 'Incomplete access key config'):
-            aws_auth.resolve_auth_method(config)
+            aws_auth.validate_auth_config(config, auth_method)
 
     def test_rejects_session_token_without_access_key_credentials(self):
         config = {
             'bucket': 'my-bucket',
+            'auth_method': AUTH_METHOD_ACCESS_KEY,
             'aws_session_token': 'token-only',
         }
+        auth_method = aws_auth.resolve_auth_method(config)
         with self.assertRaisesRegex(ValueError, 'Incomplete access key config'):
-            aws_auth.resolve_auth_method(config)
+            aws_auth.validate_auth_config(config, auth_method)
 
     def test_ignores_empty_optional_session_token(self):
         config = {
             'bucket': 'my-bucket',
             'aws_session_token': '',
         }
-        self.assertIsNone(aws_auth.resolve_auth_method(config))
+        auth_method = aws_auth.resolve_auth_method(config)
+        aws_auth.validate_auth_config(config, auth_method)
+        self.assertIsNone(auth_method)
 
     def test_treats_empty_strings_as_missing(self):
         config = {
             'bucket': 'my-bucket',
+            'auth_method': AUTH_METHOD_ACCESS_KEY,
             'aws_access_key_id': 'AKIAEXAMPLE',
             'aws_secret_access_key': '',
         }
+        auth_method = aws_auth.resolve_auth_method(config)
         with self.assertRaisesRegex(ValueError, 'Incomplete access key config'):
-            aws_auth.resolve_auth_method(config)
+            aws_auth.validate_auth_config(config, auth_method)
 
     def test_rejects_blank_role_config(self):
         config = {
             'bucket': 'my-bucket',
+            'auth_method': AUTH_METHOD_ROLE,
             'account_id': '',
             'role_name': '',
             'external_id': '',
         }
+        auth_method = aws_auth.resolve_auth_method(config)
         with self.assertRaisesRegex(ValueError, 'Incomplete role assumption config'):
-            aws_auth.resolve_auth_method(config)
+            aws_auth.validate_auth_config(config, auth_method)
 
     def test_get_required_config_keys(self):
         self.assertEqual(
@@ -161,15 +170,16 @@ class TestExplicitAuthMethod(unittest.TestCase):
     def test_access_key_auth_method_matches_s3_credentials_type(self):
         self.assertEqual(AUTH_METHOD_ACCESS_KEY, 's3Credentials')
 
-    def test_explicit_access_key_wins_over_legacy_role_fields(self):
+    def test_explicit_access_key_ignores_unselected_role_fields(self):
         config = {
             'auth_method': AUTH_METHOD_ACCESS_KEY,
             'aws_access_key_id': 'AKIAEXAMPLE',
             'aws_secret_access_key': 'secret',
-            'external_id': 'legacy-external-id',
+            'external_id': 'unselected-external-id',
         }
-        self.assertEqual(
-            aws_auth.resolve_auth_method(config), AUTH_METHOD_ACCESS_KEY)
+        auth_method = aws_auth.resolve_auth_method(config)
+        aws_auth.validate_auth_config(config, auth_method)
+        self.assertEqual(auth_method, AUTH_METHOD_ACCESS_KEY)
 
     def test_explicit_role_wins_over_access_key_fields(self):
         config = {
@@ -180,30 +190,27 @@ class TestExplicitAuthMethod(unittest.TestCase):
             'aws_access_key_id': 'AKIAEXAMPLE',
             'aws_secret_access_key': 'secret',
         }
-        self.assertEqual(
-            aws_auth.resolve_auth_method(config), AUTH_METHOD_ROLE)
+        auth_method = aws_auth.resolve_auth_method(config)
+        aws_auth.validate_auth_config(config, auth_method)
+        self.assertEqual(auth_method, AUTH_METHOD_ROLE)
 
     def test_explicit_access_key_requires_credentials(self):
         config = {
             'auth_method': AUTH_METHOD_ACCESS_KEY,
-            'external_id': 'legacy-external-id',
+            'external_id': 'unselected-external-id',
         }
+        auth_method = aws_auth.resolve_auth_method(config)
         with self.assertRaisesRegex(ValueError, 'Incomplete access key config'):
-            aws_auth.resolve_auth_method(config)
+            aws_auth.validate_auth_config(config, auth_method)
 
     def test_explicit_role_requires_role_credentials(self):
         config = {
             'auth_method': AUTH_METHOD_ROLE,
             'external_id': 'external-id',
         }
+        auth_method = aws_auth.resolve_auth_method(config)
         with self.assertRaisesRegex(ValueError, 'Incomplete role assumption config'):
-            aws_auth.resolve_auth_method(config)
-
-    def test_invalid_auth_method_raises(self):
-        config = {'auth_method': 'invalid'}
-        with self.assertRaises(ValueError):
-            aws_auth.resolve_auth_method(config)
-
+            aws_auth.validate_auth_config(config, auth_method)
 
 class TestAuthRouting(unittest.TestCase):
 
@@ -235,7 +242,7 @@ class TestAuthRouting(unittest.TestCase):
     @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_role_assumption')
     @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
     @mock.patch('singer.utils.parse_args')
-    def test_field_based_role_config_uses_role_client(
+    def test_legacy_external_id_uses_role_client(
             self, mock_parse_args, mock_setup_access_key, mock_setup_role,
             mock_do_discover):
         config = {
@@ -302,7 +309,7 @@ class TestAuthRouting(unittest.TestCase):
     @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_role_assumption')
     @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
     @mock.patch('singer.utils.parse_args')
-    def test_field_based_access_key_config_uses_access_key_client(
+    def test_access_credentials_without_auth_method_are_rejected(
             self, mock_parse_args, mock_setup_access_key, mock_setup_role,
             mock_do_discover):
         config = {
@@ -313,11 +320,12 @@ class TestAuthRouting(unittest.TestCase):
         }
         mock_parse_args.side_effect = _make_parse_args_side_effect(config)
 
-        tap_s3_csv.main()
+        with self.assertRaisesRegex(ValueError, 'auth_method is required'):
+            tap_s3_csv.main()
 
         mock_setup_role.assert_not_called()
-        mock_setup_access_key.assert_called_once_with(config)
-        mock_do_discover.assert_called_once()
+        mock_setup_access_key.assert_not_called()
+        mock_do_discover.assert_not_called()
 
 
 class TestSetupExternalSourceWithAwsAccessKey(unittest.TestCase):
