@@ -95,6 +95,7 @@ A sample configuration is available inside [config.sample.json](config.sample.js
 ```
 {
     "bucket": "bucket-name",
+    "auth_method": "awsRoleAssumption",
     "account_id": "111222333444",
     "role_name": "role name in external AWS account giving your AWS account permission to access their S3 bucket",
     "external_id": "external id defined in role in external AWS account giving your AWS account permission to access their S3 bucket",
@@ -116,15 +117,15 @@ A sample configuration is available inside [config.sample.json](config.sample.js
 - **account_id**: The AWS account id of the external AWS account you are trying to get the file from
 - **role_name**: The name of the role set up in the external AWS account to provide you access to their S3 bucket
 - **external_id**: The external_id defined in the role to help authorize your AWS account when connecting to the external AWS account
+- **auth_method**: Set to `awsRoleAssumption` for explicit role-based auth. Legacy configs that include `external_id` without `auth_method` still use role assumption.
 - **recursive_search**: true/false/undefined
-
-Role assumption and access key authentication are mutually exclusive. Do not include both sets of credentials in the same config.
 
 ### Configuration when authenticating with AWS access keys
 
 ```
 {
     "bucket": "bucket-name",
+    "auth_method": "s3Credentials",
     "aws_access_key_id": "AKIA...",
     "aws_secret_access_key": "your-secret-access-key",
     "aws_session_token": "optional-session-token-for-temporary-credentials",
@@ -143,6 +144,7 @@ Role assumption and access key authentication are mutually exclusive. Do not inc
 - **aws_access_key_id**: The AWS access key ID for the customer S3 bucket
 - **aws_secret_access_key**: The AWS secret access key for the customer S3 bucket
 - **aws_session_token**: Optional session token when using temporary credentials
+- **auth_method**: Must be set to `s3Credentials` to use access key authentication
 
 A note about `recursive_search` property: By default (with `recursive_search` undefined or set to true), the tap will select files in your S3 bucket whose file names match the `search_pattern` regex in the folder you specify with `search_prefix`, and any subfolders within the folder. If multiple files are found in the folder structure that match the `search_pattern`, the content of all of the files will be combined. For discovery, this means all columns from all files will be present in the catalog that gets produced, and for import, it means all columns and all rows from all files will be present in the resulting output (for files that don’t include columns that are present in other selected files, the corresponding cells for those rows will just be blank). This behaviour could potentially be beneficial if you have multiple files with the same schema, and you would like the tap to just combine the rows. However, it could also lead to undesired results if multiple files within the same folder structure just happen to match the same `search_pattern`, but aren’t intended to be related. To limit the search to exactly folder specified with `search_prefix`, set `recursive_search` to false.
 

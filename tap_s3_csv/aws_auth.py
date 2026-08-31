@@ -1,15 +1,10 @@
-from enum import Enum
-
 COMMON_REQUIRED_CONFIG_KEYS = ('bucket',)
 ROLE_REQUIRED_CONFIG_KEYS = ('account_id', 'role_name', 'external_id')
 ACCESS_KEY_REQUIRED_CONFIG_KEYS = ('aws_access_key_id', 'aws_secret_access_key')
 ACCESS_KEY_OPTIONAL_CONFIG_KEYS = ('aws_session_token',)
 
-
-class AwsAuthMode(Enum):
-    DEFAULT = 'default'  # Use ambient worker credentials without assuming a customer role.
-    ROLE = 'role'
-    ACCESS_KEY = 'access_key'
+AUTH_METHOD_ROLE = 'awsRoleAssumption'
+AUTH_METHOD_ACCESS_KEY = 's3Credentials'
 
 
 def _has_non_empty_value(config, keys):
@@ -24,33 +19,43 @@ def _missing_keys(config, keys):
     return [key for key in keys if config.get(key) in (None, '')]
 
 
-def validate_auth_config(config):
-    role_has_values = _has_non_empty_value(config, ROLE_REQUIRED_CONFIG_KEYS)
-    access_key_has_values = _has_non_empty_value(
-        config,
-        ACCESS_KEY_REQUIRED_CONFIG_KEYS + ACCESS_KEY_OPTIONAL_CONFIG_KEYS,
-    )
+def _get_auth_requirements(auth_method):
+    if auth_method == AUTH_METHOD_ROLE:
+        return ROLE_REQUIRED_CONFIG_KEYS, 'role assumption'
+    if auth_method == AUTH_METHOD_ACCESS_KEY:
+        return ACCESS_KEY_REQUIRED_CONFIG_KEYS, 'access key'
+    return (), None
 
-    if role_has_values and access_key_has_values:
+
+def resolve_auth_method(config):
+    """Return the configured auth method, or None for internal S3."""
+    auth_method = config.get('auth_method')
+    if auth_method is None and 'external_id' in config:
+        return AUTH_METHOD_ROLE
+    if auth_method is None:
+        return None
+    if auth_method not in (AUTH_METHOD_ROLE, AUTH_METHOD_ACCESS_KEY):
         raise ValueError(
-            'AWS authentication config must use either role assumption '
-            '(account_id, role_name, external_id) or access key credentials '
-            '(aws_access_key_id, aws_secret_access_key), not both.'
+            f'Unsupported auth_method {auth_method!r}. '
+            f'Must be {AUTH_METHOD_ACCESS_KEY!r} or {AUTH_METHOD_ROLE!r}.'
         )
+    return auth_method
 
-    if role_has_values:
-        required_keys = ROLE_REQUIRED_CONFIG_KEYS
-        auth_label = 'role assumption'
-    elif access_key_has_values:
-        required_keys = ACCESS_KEY_REQUIRED_CONFIG_KEYS
-        auth_label = 'access key'
-    elif _has_any_key(config, ROLE_REQUIRED_CONFIG_KEYS):
-        required_keys = ROLE_REQUIRED_CONFIG_KEYS
-        auth_label = 'role assumption'
-    elif _has_any_key(config, ACCESS_KEY_REQUIRED_CONFIG_KEYS):
-        required_keys = ACCESS_KEY_REQUIRED_CONFIG_KEYS
-        auth_label = 'access key'
-    else:
+
+def validate_auth_config(config, auth_method):
+    required_keys, auth_label = _get_auth_requirements(auth_method)
+    if auth_method is None:
+        if _has_non_empty_value(
+                config, ROLE_REQUIRED_CONFIG_KEYS
+                + ACCESS_KEY_REQUIRED_CONFIG_KEYS
+                + ACCESS_KEY_OPTIONAL_CONFIG_KEYS
+        ) or _has_any_key(
+                config,
+                ROLE_REQUIRED_CONFIG_KEYS + ACCESS_KEY_REQUIRED_CONFIG_KEYS
+        ):
+            raise ValueError(
+                'auth_method is required when AWS authentication credentials are provided.'
+            )
         return
 
     missing_keys = _missing_keys(config, required_keys)
@@ -61,20 +66,6 @@ def validate_auth_config(config):
         )
 
 
-def get_auth_mode(config):
-    """Validate config and return the selected AWS authentication mode."""
-    validate_auth_config(config)
-
-    if _has_non_empty_value(config, ROLE_REQUIRED_CONFIG_KEYS):
-        return AwsAuthMode.ROLE
-    if _has_non_empty_value(config, ACCESS_KEY_REQUIRED_CONFIG_KEYS):
-        return AwsAuthMode.ACCESS_KEY
-    return AwsAuthMode.DEFAULT
-
-
-def get_required_config_keys(auth_mode):
-    auth_required_keys = {
-        AwsAuthMode.ROLE: ROLE_REQUIRED_CONFIG_KEYS,
-        AwsAuthMode.ACCESS_KEY: ACCESS_KEY_REQUIRED_CONFIG_KEYS,
-    }.get(auth_mode, ())
+def get_required_config_keys(auth_method):
+    auth_required_keys, _ = _get_auth_requirements(auth_method)
     return [*COMMON_REQUIRED_CONFIG_KEYS, *auth_required_keys]
