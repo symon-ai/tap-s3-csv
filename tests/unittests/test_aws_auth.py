@@ -42,15 +42,14 @@ class TestAwsAuthResolution(unittest.TestCase):
         config = {'bucket': 'my-bucket'}
         self.assertIsNone(aws_auth.resolve_auth_method(config))
 
-    def test_legacy_external_id_resolves_role_method(self):
+    def test_role_credentials_without_auth_method_do_not_resolve(self):
         config = {
             'bucket': 'my-bucket',
             'account_id': '111222333444',
             'role_name': 'my-role',
             'external_id': 'external-id',
         }
-        self.assertEqual(
-            aws_auth.resolve_auth_method(config), AUTH_METHOD_ROLE)
+        self.assertIsNone(aws_auth.resolve_auth_method(config))
 
     def test_returns_explicit_role_method(self):
         config = {
@@ -71,7 +70,7 @@ class TestAwsAuthResolution(unittest.TestCase):
         with self.assertRaises(ValueError):
             aws_auth.resolve_auth_method(config)
 
-    def test_validation_accepts_legacy_role_credentials(self):
+    def test_validation_rejects_role_credentials_without_auth_method(self):
         config = {
             'bucket': 'my-bucket',
             'account_id': '111222333444',
@@ -79,8 +78,8 @@ class TestAwsAuthResolution(unittest.TestCase):
             'external_id': 'external-id',
         }
         auth_method = aws_auth.resolve_auth_method(config)
-        aws_auth.validate_auth_config(config, auth_method)
-        self.assertEqual(auth_method, AUTH_METHOD_ROLE)
+        with self.assertRaisesRegex(ValueError, 'auth_method is required'):
+            aws_auth.validate_auth_config(config, auth_method)
 
     def test_validation_rejects_access_credentials_without_auth_method(self):
         config = {
@@ -98,7 +97,7 @@ class TestAwsAuthResolution(unittest.TestCase):
             'external_id': 'external-id',
         }
         auth_method = aws_auth.resolve_auth_method(config)
-        with self.assertRaisesRegex(ValueError, 'Incomplete role assumption config'):
+        with self.assertRaisesRegex(ValueError, 'auth_method is required'):
             aws_auth.validate_auth_config(config, auth_method)
 
     def test_rejects_incomplete_access_key_config(self):
@@ -245,7 +244,7 @@ class TestAuthRouting(unittest.TestCase):
     @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_role_assumption')
     @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_access_key')
     @mock.patch('singer.utils.parse_args')
-    def test_legacy_external_id_uses_role_client(
+    def test_role_credentials_without_auth_method_are_rejected(
             self, mock_parse_args, mock_setup_access_key, mock_setup_role,
             mock_do_discover):
         config = {
@@ -257,11 +256,12 @@ class TestAuthRouting(unittest.TestCase):
         }
         mock_parse_args.side_effect = _make_parse_args_side_effect(config)
 
-        tap_s3_csv.main()
+        with self.assertRaisesRegex(ValueError, 'auth_method is required'):
+            tap_s3_csv.main()
 
         mock_setup_access_key.assert_not_called()
-        mock_setup_role.assert_called_once_with(config)
-        mock_do_discover.assert_called_once()
+        mock_setup_role.assert_not_called()
+        mock_do_discover.assert_not_called()
 
     @mock.patch('tap_s3_csv.do_discover')
     @mock.patch('tap_s3_csv.s3.setup_external_source_with_aws_role_assumption')

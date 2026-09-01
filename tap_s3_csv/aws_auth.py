@@ -30,8 +30,6 @@ def _get_auth_requirements(auth_method):
 def resolve_auth_method(config):
     """Return the configured auth method, or None for internal S3."""
     auth_method = config.get('auth_method')
-    if auth_method is None and 'external_id' in config:
-        return AUTH_METHOD_ROLE
     if auth_method is None:
         return None
     if auth_method not in (AUTH_METHOD_ROLE, AUTH_METHOD_ACCESS_KEY):

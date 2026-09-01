@@ -3,7 +3,7 @@
 ## 3.9.0
 
 - Add AWS access key authentication for customer S3 CSV imports when `auth_method` is `s3Credentials` (`aws_access_key_id`, `aws_secret_access_key`, optional `aws_session_token`)
-- Role assumption and internal default credential behavior are unchanged; legacy configs with `external_id` still use role assumption
+- Role assumption requires `auth_method` to be `awsRoleAssumption`; internal default credential behavior is unchanged
 
 ## 1.3.6
 

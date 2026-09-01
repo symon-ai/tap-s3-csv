@@ -117,7 +117,7 @@ A sample configuration is available inside [config.sample.json](config.sample.js
 - **account_id**: The AWS account id of the external AWS account you are trying to get the file from
 - **role_name**: The name of the role set up in the external AWS account to provide you access to their S3 bucket
 - **external_id**: The external_id defined in the role to help authorize your AWS account when connecting to the external AWS account
-- **auth_method**: Set to `awsRoleAssumption` for explicit role-based auth. Legacy configs that include `external_id` without `auth_method` still use role assumption.
+- **auth_method**: Must be `awsRoleAssumption` for role-based auth.
 - **recursive_search**: true/false/undefined
 
 ### Configuration when authenticating with AWS access keys
