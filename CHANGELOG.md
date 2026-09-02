@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.9.0
+
+- Add AWS access key authentication for customer S3 CSV imports when `auth_method` is `s3Credentials` (`aws_access_key_id`, `aws_secret_access_key`, optional `aws_session_token`)
+- Select role assumption with `auth_method` set to `awsRoleAssumption`; omitting `auth_method` uses ambient credentials even when credential fields are present
+
 ## 1.3.6
 
 - Reintroduce ability to assume role for external AWS account
