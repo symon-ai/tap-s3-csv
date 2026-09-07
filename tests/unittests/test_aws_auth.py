@@ -16,7 +16,7 @@ INTERNAL_CONFIG = {
 
 ROLE_CONFIG = {
     'bucket': 'customer-bucket',
-    'auth_method': tap_s3_csv.AUTH_METHOD_ROLE,
+    'auth_method': 'awsRoleAssumption',
     'account_id': '111222333444',
     'role_name': 'customer-role',
     'external_id': 'external-id',
@@ -25,9 +25,9 @@ ROLE_CONFIG = {
 
 ACCESS_KEY_CONFIG = {
     'bucket': 'customer-bucket',
-    'auth_method': tap_s3_csv.AUTH_METHOD_ACCESS_KEY,
-    'aws_access_key_id': 'AKIAEXAMPLE',
-    'aws_secret_access_key': 'secret',
+    'auth_method': 's3Credentials',
+    'aws_access_key_id': mock.sentinel.aws_access_key_id,
+    'aws_secret_access_key': mock.sentinel.aws_secret_access_key,
     'tables': TABLES,
 }
 
@@ -97,6 +97,13 @@ class TestAuthRouting(unittest.TestCase):
         mock_parse_args.return_value = _args(ROLE_CONFIG)
 
         tap_s3_csv.main()
+        self.assertEqual(
+            mock_parse_args.call_args_list,
+            [
+                mock.call(tap_s3_csv.REQUIRED_CONFIG_KEYS),
+                mock.call(tap_s3_csv.REQUIRED_CONFIG_KEYS_EXTERNAL_SOURCE),
+            ],
+        )
 
         mock_setup_role.assert_called()
         mock_setup_access_key.assert_not_called()
@@ -112,6 +119,13 @@ class TestAuthRouting(unittest.TestCase):
         mock_parse_args.return_value = _args(ACCESS_KEY_CONFIG)
 
         tap_s3_csv.main()
+        self.assertEqual(
+            mock_parse_args.call_args_list,
+            [
+                mock.call(tap_s3_csv.REQUIRED_CONFIG_KEYS),
+                mock.call(tap_s3_csv.REQUIRED_CONFIG_KEYS_ACCESS_KEY),
+            ],
+        )
 
         mock_setup_access_key.assert_called()
         mock_setup_role.assert_not_called()

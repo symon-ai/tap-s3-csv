@@ -1,3 +1,5 @@
+from enum import Enum, auto
+
 import json
 import sys
 import singer
@@ -22,8 +24,21 @@ REQUIRED_CONFIG_KEYS_EXTERNAL_SOURCE = [
 REQUIRED_CONFIG_KEYS_ACCESS_KEY = [
     "bucket", "aws_access_key_id", "aws_secret_access_key"]
 
-AUTH_METHOD_ROLE = 'awsRoleAssumption'
-AUTH_METHOD_ACCESS_KEY = 's3Credentials'
+class AuthRoute(Enum):
+    ROLE_ASSUMPTION = auto()
+    ACCESS_KEY = auto()
+
+
+AUTH_METHOD_ROUTES = {
+    'awsRoleAssumption': (
+        REQUIRED_CONFIG_KEYS_EXTERNAL_SOURCE,
+        AuthRoute.ROLE_ASSUMPTION,
+    ),
+    's3Credentials': (
+        REQUIRED_CONFIG_KEYS_ACCESS_KEY,
+        AuthRoute.ACCESS_KEY,
+    ),
+}
 
 IMPORT_PERF_METRICS_LOG_PREFIX = "IMPORT_PERF_METRICS:"
 
@@ -243,23 +258,22 @@ def main():
         config = args.config
 
         auth_method = config.get('auth_method')
-        external_source = auth_method is not None
-        if external_source:
-            if auth_method == AUTH_METHOD_ROLE:
-                required_config_keys = REQUIRED_CONFIG_KEYS_EXTERNAL_SOURCE
-            elif auth_method == AUTH_METHOD_ACCESS_KEY:
-                required_config_keys = REQUIRED_CONFIG_KEYS_ACCESS_KEY
-            else:
-                raise ValueError('Config does not specify a valid S3 auth method')
+        auth_route = None
+        if auth_method is not None:
+            try:
+                required_config_keys, auth_route = AUTH_METHOD_ROUTES[auth_method]
+            except KeyError:
+                raise ValueError(
+                    'Config does not specify a valid S3 auth method') from None
             args = singer.utils.parse_args(required_config_keys)
             config = args.config
 
         config['tables'] = validate_table_config(config)
 
         try:
-            if external_source:
+            if auth_route is not None:
                 # Customer-owned external S3 requires the configured customer credentials.
-                if auth_method == AUTH_METHOD_ACCESS_KEY:
+                if auth_route is AuthRoute.ACCESS_KEY:
                     s3.setup_external_source_with_aws_access_key(config)
                 else:
                     s3.setup_external_source_with_aws_role_assumption(config)
@@ -278,7 +292,7 @@ def main():
             elif args.properties:
                 do_sync(config, args.properties, args.state)
         except ClientError as e:
-            if not external_source:
+            if auth_route is None:
                 raise
             raise s3.build_symon_exception_from_client_error(e, config.get('bucket')) from e
     except SymonException as e:
