@@ -1,8 +1,14 @@
 import csv
 import itertools
 import sys
-import random
+import random as _random
 import datetime
+
+# CWE-331: use a cryptographically strong PRNG (backed by os.urandom) instead
+# of the default non-cryptographic Mersenne Twister generator. SystemRandom
+# exposes the same randint/uniform/random API, so the fixture generator below
+# keeps producing the same shape/ranges of test data with sufficient entropy.
+random = _random.SystemRandom()
 
 MAX_POS_DOUBLE = 1.7976931348623157E+308
 MAX_POS_FLOAT = 3.402823466E+38
