@@ -1,8 +1,14 @@
 import csv
 import itertools
 import sys
-import random
 import datetime
+from random import SystemRandom
+
+# Use a cryptographically-strong PRNG (os.urandom-backed) instead of the
+# default Mersenne Twister to satisfy Veracode CWE-331 (Insufficient Entropy).
+# SystemRandom exposes the same randint/uniform/random API, so the generated
+# fixture value ranges are unchanged.
+random = SystemRandom()
 
 MAX_POS_DOUBLE = 1.7976931348623157E+308
 MAX_POS_FLOAT = 3.402823466E+38
