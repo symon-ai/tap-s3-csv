@@ -1,8 +1,12 @@
 import csv
 import itertools
 import sys
-import random
+import secrets
 import datetime
+
+# Use a cryptographically-secure RNG (CWE-331). SystemRandom exposes the same
+# randint/uniform/random call signatures as the stdlib ``random`` module.
+_rng = secrets.SystemRandom()
 
 MAX_POS_DOUBLE = 1.7976931348623157E+308
 MAX_POS_FLOAT = 3.402823466E+38
@@ -42,22 +46,22 @@ def test_unicode_characters(quoting: csv = csv.QUOTE_MINIMAL):
 def test_bigint_valid_range():
 
     return [["bigint_signed"] +
-            [random.randint(-2**63, 2**63-1) for _ in range(95)] +
+            [_rng.randint(-2**63, 2**63-1) for _ in range(95)] +
             [-2**63, 2**63-1, -1, 0, 1]]
 
 
 def test_unsigned_bigint_valid_range():
 
     return [["bigint_unsigned"] +
-            [random.randint(2**63, 2**64) for _ in range(98)] +
+            [_rng.randint(2**63, 2**64) for _ in range(98)] +
             [-2**63, 2**63-1, -1, 0, 1]]
 
 
 def test_beyond_bigint_valid_range():
 
     return [["larger_than_bigint"] +
-            [random.randint(2**64+1, 2**65) for _ in range(49)] +
-            [random.randint(-2**64, -2**63-1) for _ in range(49)] +
+            [_rng.randint(2**64+1, 2**65) for _ in range(49)] +
+            [_rng.randint(-2**64, -2**63-1) for _ in range(49)] +
             [2**64+1, -2**63-1]]
 
 
@@ -65,10 +69,10 @@ def test_float_double_representable_range():
 
     # noinspection PyTypeChecker
     data = [["float at the edges", "double at the edges"]] + \
-           [[random.uniform(MIN_POS_FLOAT, MAX_POS_FLOAT),
-             random.uniform(MIN_POS_DOUBLE, MAX_POS_DOUBLE)] for _ in range(47)] + \
-           [[random.uniform(MIN_NEG_FLOAT, MIN_NEG_FLOAT),
-             random.uniform(MIN_NEG_DOUBLE, MAX_NEG_DOUBLE)] for _ in range(47)] + \
+           [[_rng.uniform(MIN_POS_FLOAT, MAX_POS_FLOAT),
+             _rng.uniform(MIN_POS_DOUBLE, MAX_POS_DOUBLE)] for _ in range(47)] + \
+           [[_rng.uniform(MIN_NEG_FLOAT, MIN_NEG_FLOAT),
+             _rng.uniform(MIN_NEG_DOUBLE, MAX_NEG_DOUBLE)] for _ in range(47)] + \
            [[MIN_POS_FLOAT, MIN_POS_DOUBLE], [MAX_POS_FLOAT, MAX_POS_DOUBLE],
             [MIN_NEG_FLOAT, MIN_NEG_DOUBLE], [MAX_NEG_FLOAT, MAX_NEG_DOUBLE],
             [0, 0], [0.0, 0.0]]
@@ -78,17 +82,17 @@ def test_float_double_representable_range():
 
 def test_float_double_normal_range():
     return [["float with precision"] +
-            [random.random() for _ in range(25)] +
-            [random.random() * 10 ** 16 for _ in range(25)] +
-            [-random.random() for _ in range(25)] +
-            [random.random() * 10 ** 16 for _ in range(25)]]
+            [_rng.random() for _ in range(25)] +
+            [_rng.random() * 10 ** 16 for _ in range(25)] +
+            [-_rng.random() for _ in range(25)] +
+            [_rng.random() * 10 ** 16 for _ in range(25)]]
 
 
 def test_number_formats_commas():
 
     data = [["positive numbers with commas", "negative numbers with commas"]] + \
-           [["{:,}".format(random.random() * 10 ** 10),
-             "{:,}".format(-random.random() * 10 ** 10)] for _ in range(100)]
+           [["{:,}".format(_rng.random() * 10 ** 10),
+             "{:,}".format(-_rng.random() * 10 ** 10)] for _ in range(100)]
 
     return list(zip(*data))
 
@@ -96,12 +100,12 @@ def test_number_formats_commas():
 def test_number_formats_plus_minus_signs():
 
     data = [["positive with various signs", "negative with signs"]] + \
-           [["{:+f}".format(random.random() * 10 ** 10),
-             "{:+f}".format(-random.random() * 10 ** 10)] for _ in range(34)] + \
-           [["{: f}".format(random.random() * 10 ** 10),
-             "{: f}".format(-random.random() * 10 ** 10)] for _ in range(34)] + \
-           [["{:-f}".format(random.random() * 10 ** 10),
-             "{:-f}".format(-random.random() * 10 ** 10)] for _ in range(32)]
+           [["{:+f}".format(_rng.random() * 10 ** 10),
+             "{:+f}".format(-_rng.random() * 10 ** 10)] for _ in range(34)] + \
+           [["{: f}".format(_rng.random() * 10 ** 10),
+             "{: f}".format(-_rng.random() * 10 ** 10)] for _ in range(34)] + \
+           [["{:-f}".format(_rng.random() * 10 ** 10),
+             "{:-f}".format(-_rng.random() * 10 ** 10)] for _ in range(32)]
 
     return list(zip(*data))
 
@@ -109,7 +113,7 @@ def test_number_formats_plus_minus_signs():
 def test_number_formats_percentages():
 
     data = [["positive percentages", "negative percentages"]] + \
-           [["{:%}".format(random.random()), "{:%}".format(-random.random())] for _ in range(100)]
+           [["{:%}".format(_rng.random()), "{:%}".format(-_rng.random())] for _ in range(100)]
 
     return list(zip(*data))
 
@@ -126,10 +130,10 @@ def test_date_time_iso_format():
 
     data = []
     for row in range(100):
-        timezone = datetime.timezone(datetime.timedelta(minutes=random.randint(0, 59), hours=random.randint(-23, 23)),
+        timezone = datetime.timezone(datetime.timedelta(minutes=_rng.randint(0, 59), hours=_rng.randint(-23, 23)),
                                      "ABC")
         dt = datetime.datetime.now(tz=timezone) + datetime.timedelta(
-            seconds=random.uniform(-60 * 60 * 24 * 365 * 100, 60 * 60 * 24 * 365 * 100))
+            seconds=_rng.uniform(-60 * 60 * 24 * 365 * 100, 60 * 60 * 24 * 365 * 100))
         data += [[dt.date().isoformat(),
                  dt.time().isoformat(),
                  dt.replace(tzinfo=timezone.utc).isoformat(),
@@ -143,10 +147,10 @@ def test_date_time_iso_format_space():
 
     rows = []
     for row in range(100):
-        timezone = datetime.timezone(datetime.timedelta(minutes=random.randint(0, 59), hours=random.randint(-23, 23)),
+        timezone = datetime.timezone(datetime.timedelta(minutes=_rng.randint(0, 59), hours=_rng.randint(-23, 23)),
                                      "ABC")
         dt = datetime.datetime.now(tz=timezone) + datetime.timedelta(
-            seconds=random.uniform(-60 * 60 * 24 * 365 * 100, 60 * 60 * 24 * 365 * 100))
+            seconds=_rng.uniform(-60 * 60 * 24 * 365 * 100, 60 * 60 * 24 * 365 * 100))
         rows += [[dt.replace(tzinfo=timezone.utc).isoformat(" "),
                  dt.isoformat(" ")]]
 
@@ -159,10 +163,10 @@ def test_date_time_iso_format_to_hours():
     rows = []
     for row in range(100):
         timezone = datetime.timezone(
-            datetime.timedelta(minutes=random.randint(0, 59), hours=random.randint(-23, 23)),
+            datetime.timedelta(minutes=_rng.randint(0, 59), hours=_rng.randint(-23, 23)),
             "ABC")
         dt = datetime.datetime.now(tz=timezone) + datetime.timedelta(
-            seconds=random.uniform(-60 * 60 * 24 * 365 * 100, 60 * 60 * 24 * 365 * 100))
+            seconds=_rng.uniform(-60 * 60 * 24 * 365 * 100, 60 * 60 * 24 * 365 * 100))
         rows += [[dt.time().isoformat(timespec="hours"),
                   dt.replace(tzinfo=timezone.utc).isoformat(timespec="hours"),
                   dt.isoformat(timespec="hours")]]
@@ -176,10 +180,10 @@ def test_date_time_iso_format_to_minutes():
     rows = []
     for row in range(100):
         timezone = datetime.timezone(
-            datetime.timedelta(minutes=random.randint(0, 59), hours=random.randint(-23, 23)),
+            datetime.timedelta(minutes=_rng.randint(0, 59), hours=_rng.randint(-23, 23)),
             "ABC")
         dt = datetime.datetime.now(tz=timezone) + datetime.timedelta(
-            seconds=random.uniform(-60 * 60 * 24 * 365 * 100, 60 * 60 * 24 * 365 * 100))
+            seconds=_rng.uniform(-60 * 60 * 24 * 365 * 100, 60 * 60 * 24 * 365 * 100))
         rows += [[dt.time().isoformat(timespec="minutes"),
                   dt.replace(tzinfo=timezone.utc).isoformat(timespec="minutes"),
                   dt.isoformat(timespec="minutes")]]
@@ -193,10 +197,10 @@ def test_date_time_iso_format_to_seconds():
     rows = []
     for row in range(100):
         timezone = datetime.timezone(
-            datetime.timedelta(minutes=random.randint(0, 59), hours=random.randint(-23, 23)),
+            datetime.timedelta(minutes=_rng.randint(0, 59), hours=_rng.randint(-23, 23)),
             "ABC")
         dt = datetime.datetime.now(tz=timezone) + datetime.timedelta(
-            seconds=random.uniform(-60 * 60 * 24 * 365 * 100, 60 * 60 * 24 * 365 * 100))
+            seconds=_rng.uniform(-60 * 60 * 24 * 365 * 100, 60 * 60 * 24 * 365 * 100))
         rows += [[dt.time().isoformat(timespec="seconds"),
                   dt.replace(tzinfo=timezone.utc).isoformat(timespec="seconds"),
                   dt.isoformat(timespec="seconds")]]
@@ -210,10 +214,10 @@ def test_date_time_iso_format_to_milliseconds():
     rows = []
     for row in range(100):
         timezone = datetime.timezone(
-            datetime.timedelta(minutes=random.randint(0, 59), hours=random.randint(-23, 23)),
+            datetime.timedelta(minutes=_rng.randint(0, 59), hours=_rng.randint(-23, 23)),
             "ABC")
         dt = datetime.datetime.now(tz=timezone) + datetime.timedelta(
-            seconds=random.uniform(-60 * 60 * 24 * 365 * 100, 60 * 60 * 24 * 365 * 100))
+            seconds=_rng.uniform(-60 * 60 * 24 * 365 * 100, 60 * 60 * 24 * 365 * 100))
         rows += [[dt.time().isoformat(timespec="milliseconds"),
                   dt.replace(tzinfo=timezone.utc).isoformat(timespec="milliseconds"),
                   dt.isoformat(timespec="milliseconds")]]
@@ -230,10 +234,10 @@ def test_date_time_iso_format_to_microseconds():
     rows = []
     for row in range(100):
         timezone = datetime.timezone(
-            datetime.timedelta(minutes=random.randint(0, 59), hours=random.randint(-23, 23)),
+            datetime.timedelta(minutes=_rng.randint(0, 59), hours=_rng.randint(-23, 23)),
             "ABC")
         dt = datetime.datetime.now(tz=timezone) + datetime.timedelta(
-            seconds=random.uniform(-60 * 60 * 24 * 365 * 100, 60 * 60 * 24 * 365 * 100))
+            seconds=_rng.uniform(-60 * 60 * 24 * 365 * 100, 60 * 60 * 24 * 365 * 100))
         rows += [[dt.time().isoformat(timespec="microseconds"),
                   dt.replace(tzinfo=timezone.utc).isoformat(timespec="microseconds"),
                   dt.isoformat(timespec="microseconds")]]
@@ -249,7 +253,7 @@ def test_date_time_iso_format_min_max_values(quoting: csv = csv.QUOTE_MINIMAL):
     with open('test_date_time_iso_format_min_max_values.csv', 'w') as file:
         write = csv.writer(file, quoting=quoting)
         write.writerow(["date", "time", "datetime without tz", "datetime with tz"])
-        timezone = datetime.timezone(datetime.timedelta(minutes=random.randint(0, 59), hours=random.randint(-23, 23)),
+        timezone = datetime.timezone(datetime.timedelta(minutes=_rng.randint(0, 59), hours=_rng.randint(-23, 23)),
                                      "ABC")
         dt = datetime.datetime(datetime.MINYEAR, 1, 1, tzinfo=timezone)
         write.writerow([dt.date().isoformat(),
@@ -269,8 +273,8 @@ def test_primary_key_unique_values_and_nullable_integers():
 
     data = [["key", "nullable integer", "non-nullable integer", "description"]] + \
            [[key,
-             random.randint(1, 1000) if key != 11 else None,
-             random.randint(1, 1000) if key != 12 else None,
+             _rng.randint(1, 1000) if key != 11 else None,
+             _rng.randint(1, 1000) if key != 12 else None,
              "passing row" if key != 12 else "failing row"] for key in range(1, 101)]
 
     return list(zip(*data))
@@ -283,15 +287,15 @@ def test_primary_key_56_null_config(quoting: csv = csv.QUOTE_MINIMAL):
         write.writerow(["id", "value"])
         for pk in range(1, 100):
             if pk != 56:
-                write.writerow([pk, random.randint(1, 1000)])
+                write.writerow([pk, _rng.randint(1, 1000)])
             else:
-                write.writerow([None, random.randint(1, 1000)])
+                write.writerow([None, _rng.randint(1, 1000)])
 
 
 # The JSON for this file contains regex pattern matching that matches MULTIPLE files
 def test_multiple_file_with_pk_part_a():
     data = [["key", "value"]] + \
-           [[key, random.randint(1, 1000)] for key in range(1, 20)]
+           [[key, _rng.randint(1, 1000)] for key in range(1, 20)]
 
     return list(zip(*data))
 
@@ -299,7 +303,7 @@ def test_multiple_file_with_pk_part_a():
 # The JSON for this file contains regex pattern matching that matches MULTIPLE files
 def test_multiple_file_with_pk_part_b():
     data = [["key", "value"]] + \
-           [[key, random.randint(1, 1000)] for key in range(21, 40)]
+           [[key, _rng.randint(1, 1000)] for key in range(21, 40)]
 
     return list(zip(*data))
 
@@ -307,7 +311,7 @@ def test_multiple_file_with_pk_part_b():
 # The JSON for this file contains regex pattern matching that matches MULTIPLE files
 def test_multiple_file_with_pk_part_c():
     data = [["key", "value"]] + \
-           [[key, random.randint(1, 1000)] for key in range(61, 80)]
+           [[key, _rng.randint(1, 1000)] for key in range(61, 80)]
 
     return list(zip(*data))
 
@@ -315,7 +319,7 @@ def test_multiple_file_with_pk_part_c():
 # The JSON for this file contains regex pattern matching that matches MULTIPLE files
 def test_header_order_multiple_file_with_pk_part_a():
     data = [["key", "value"]] + \
-           [[key, random.randint(1, 1000)] for key in range(41, 60)]
+           [[key, _rng.randint(1, 1000)] for key in range(41, 60)]
 
     return list(zip(*data))
 
@@ -323,7 +327,7 @@ def test_header_order_multiple_file_with_pk_part_a():
 # The JSON for this file contains regex pattern matching that matches MULTIPLE files
 def test_header_order_multiple_file_with_pk_part_b():
     data = [["value", "key"]] + \
-           [[random.randint(1, 1000), key] for key in range(61, 80)]
+           [[_rng.randint(1, 1000), key] for key in range(61, 80)]
 
     return list(zip(*data))
 
@@ -334,8 +338,8 @@ def test_primary_key_56_duplicate_config(quoting: csv = csv.QUOTE_MINIMAL):
         write = csv.writer(file, quoting=quoting)
         write.writerow(["id", "value"])
         for pk in range(1, 100):
-            write.writerow([pk, random.randint(1, 1000)])
-        write.writerow([56, random.randint(1, 1000)])
+            write.writerow([pk, _rng.randint(1, 1000)])
+        write.writerow([56, _rng.randint(1, 1000)])
 
 
 def write_csv_file(filename: str, rows_of_data: list, quoting: csv = csv.QUOTE_MINIMAL, rectangular: bool = True):
