@@ -4,6 +4,12 @@ import sys
 import random
 import datetime
 
+# CWE-331: use a cryptographically secure RNG (SystemRandom, backed by
+# os.urandom) instead of the default Mersenne Twister. SystemRandom inherits
+# randint/uniform/random from random.Random, so every random.* call site below
+# is preserved behaviorally while drawing from a CSPRNG.
+random = random.SystemRandom()
+
 MAX_POS_DOUBLE = 1.7976931348623157E+308
 MAX_POS_FLOAT = 3.402823466E+38
 MAX_NEG_DOUBLE = -1.7976931348623157E+308
