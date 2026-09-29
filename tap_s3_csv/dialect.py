@@ -49,8 +49,8 @@ def detect_dialect(config, s3_file, table):
     # max bytes we want to cache in memory
     MAX_LINES_BYTES = 25 * 1024 ** 2
 
-    # max bytes for each line read
-    MAX_LINE_BYTES = 1024 ** 2
+    # Physical-line limit: only an explicit opt-in accepts lines through 2 MiB.
+    MAX_LINE_BYTES = 2 * 1024 ** 2 if config.get('allow_2mb_csv_lines') is True else 1024 ** 2 - 1
 
     # chardet is slow and rarely detects early. We limit the number of lines it is fed to keep performance acceptable.
     # The question is how many lines and how do we pick the most interesting lines?
@@ -84,7 +84,7 @@ def detect_dialect(config, s3_file, table):
             line = next(file_iter)
             line_bytes = len(line)
 
-            if line_bytes >= MAX_LINE_BYTES:
+            if line_bytes > MAX_LINE_BYTES:
                 raise Exception('Too many bytes in one line')
 
             lines_read += 1
