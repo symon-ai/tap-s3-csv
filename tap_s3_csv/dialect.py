@@ -20,7 +20,7 @@ def max_physical_line_bytes(config):
     # Physical-line limit: only an explicit opt-in accepts lines through 2 MiB.
     if config.get('allow_2mb_csv_lines') is True:
         return 2 * 1024 ** 2
-    return 1024 ** 2 - 1
+    return 1024 ** 2
 
 
 def detect_tables_dialect(config):
@@ -98,7 +98,7 @@ def detect_dialect(config, s3_file, table):
             line = next(file_iter)
             line_bytes = len(line)
 
-            if line_bytes > MAX_LINE_BYTES:
+            if line_bytes >= MAX_LINE_BYTES:
                 raise Exception('Too many bytes in one line')
 
             lines_read += 1
