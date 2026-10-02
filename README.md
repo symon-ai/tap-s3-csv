@@ -58,6 +58,7 @@ Here is an example of basic config, and a bit of a run down on each of the prope
 
 - **bucket**: The name of the bucket to search for files under.
 - **tables**: Used to search for files, and emit records as "tables" from those files. Will be used by a [`voluptuous`](https://github.com/alecthomas/voluptuous)-based configuration checker.
+- **allow_2mb_csv_lines** (top-level, boolean): For internal Sales Planning CSV imports only, set to `true` to accept physical CSV lines up to and including 2 MiB during dialect detection. Omit or set to `false` for all other imports; the original limit rejects lines at or above 1 MiB.
 
 The `table` field consists of one or more objects that describe how to find files and emit records. A more detailed example below:
 

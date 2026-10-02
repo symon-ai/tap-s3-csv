@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.9.1
+
+- Allow internal Sales Planning CSV imports to opt in with `allow_2mb_csv_lines: true` to physical lines through 2 MiB inclusive; imports without the flag still reject lines at 1 MiB.
+
 ## 3.9.0
 
 - Add AWS access key authentication for customer S3 CSV imports when `auth_method` is `s3Credentials` (`aws_access_key_id`, `aws_secret_access_key`, optional `aws_session_token`)

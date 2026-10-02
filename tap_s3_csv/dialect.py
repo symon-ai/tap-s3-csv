@@ -15,7 +15,22 @@ from tap_s3_csv import s3, preprocess
 
 LOGGER = singer.get_logger()
 
+
+def max_physical_line_bytes(config):
+    # Physical-line limit: only an explicit opt-in accepts lines through 2 MiB.
+    if config.get('allow_2mb_csv_lines') is True:
+        return 2 * 1024 ** 2
+    return 1024 ** 2
+
+
 def detect_tables_dialect(config):
+    if config.get('allow_2mb_csv_lines') is True:
+        max_line_bytes = max_physical_line_bytes(config)
+        LOGGER.info(
+            'Sales Planning CSV import mode (allow_2mb_csv_lines=true): '
+            f'MAX_LINE_BYTES={max_line_bytes}'
+        )
+
     # there is only one table in the array
     for table in config['tables']:
         # set is_csv_connector_import to True for imports from csv connector in Symon
@@ -49,8 +64,7 @@ def detect_dialect(config, s3_file, table):
     # max bytes we want to cache in memory
     MAX_LINES_BYTES = 25 * 1024 ** 2
 
-    # max bytes for each line read
-    MAX_LINE_BYTES = 1024 ** 2
+    MAX_LINE_BYTES = max_physical_line_bytes(config)
 
     # chardet is slow and rarely detects early. We limit the number of lines it is fed to keep performance acceptable.
     # The question is how many lines and how do we pick the most interesting lines?
