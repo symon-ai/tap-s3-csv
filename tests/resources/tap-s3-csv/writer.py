@@ -1,8 +1,14 @@
 import csv
 import itertools
 import sys
-import random
+import secrets
 import datetime
+
+# CWE-331 remediation (WP-33351): use a cryptographically secure RNG instead of
+# the non-cryptographic `random` module. secrets.SystemRandom exposes randint,
+# uniform, and random with identical signatures, so this is a drop-in
+# replacement that preserves the generated test-data shape/semantics.
+random = secrets.SystemRandom()
 
 MAX_POS_DOUBLE = 1.7976931348623157E+308
 MAX_POS_FLOAT = 3.402823466E+38
