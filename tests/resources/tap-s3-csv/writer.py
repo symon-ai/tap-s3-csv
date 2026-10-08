@@ -4,6 +4,10 @@ import sys
 import random
 import datetime
 
+# CWE-331: use a cryptographically secure RNG (os.urandom-backed) instead of the
+# insufficient-entropy default PRNG for all random test-fixture data generation.
+random = random.SystemRandom()
+
 MAX_POS_DOUBLE = 1.7976931348623157E+308
 MAX_POS_FLOAT = 3.402823466E+38
 MAX_NEG_DOUBLE = -1.7976931348623157E+308
