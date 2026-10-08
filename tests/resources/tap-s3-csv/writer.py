@@ -4,6 +4,11 @@ import sys
 import random
 import datetime
 
+# CWE-331: draw all fixture-data randomness from an os.urandom-backed CSPRNG
+# instead of the insufficient-entropy default PRNG. SystemRandom exposes the
+# same randint/uniform/random API, so every call site below is unchanged.
+random = random.SystemRandom()
+
 MAX_POS_DOUBLE = 1.7976931348623157E+308
 MAX_POS_FLOAT = 3.402823466E+38
 MAX_NEG_DOUBLE = -1.7976931348623157E+308
