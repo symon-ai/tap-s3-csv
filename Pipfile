@@ -16,7 +16,7 @@ jmespath = {version = "==1.1.0", markers = "python_full_version >= \"3.13.3\" an
 jsonschema = {version = "==2.6.0", markers = "python_full_version >= \"3.13.3\" and python_version < \"4.0\""}
 numpy = {version = "==2.5.0", markers = "python_full_version >= \"3.13.3\" and python_version < \"4.0\""}
 openpyxl = {version = "==3.1.5", markers = "python_full_version >= \"3.13.3\" and python_version < \"4.0\""}
-orjson = {version = "==3.11.5", markers = "python_full_version >= \"3.13.3\" and python_version < \"4.0\""}
+orjson = {version = "==3.11.6", markers = "python_full_version >= \"3.13.3\" and python_version < \"4.0\""}
 packaging = {version = "==26.2", markers = "python_full_version >= \"3.13.3\" and python_version < \"4.0\""}
 pandas = {version = "==2.3.3", markers = "python_full_version >= \"3.13.3\" and python_version < \"4.0\""}
 pyarrow = {version = "==23.0.1", markers = "python_full_version >= \"3.13.3\" and python_version < \"4.0\""}
